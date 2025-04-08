@@ -48,6 +48,14 @@
             border-radius: 0.5rem;
             display: flex;
             gap: 0.5rem;
+            z-index: 10; /* 确保控制按钮在最上层 */
+        }
+        /* 添加鼠标样式 */
+        #modelContainer {
+            cursor: grab;
+        }
+        #modelContainer:active {
+            cursor: grabbing;
         }
         /* Loading animation */
         .loader {
@@ -145,40 +153,46 @@
             
             <!-- Model Upload Section -->
             <div class="bg-white rounded-lg shadow p-4 my-4">
-                <h3 class="text-lg font-bold mb-2">模型选择</h3>
-                <p class="text-gray-600 mb-4 text-sm">选择一个内置模型或上传您自己的3D模型文件。</p>
+                <!--<h3 class="text-lg font-bold mb-2">Model Selection</h3>
+                <p class="text-gray-600 mb-4 text-sm">Choose a built-in model or upload your own 3D model file.</p>-->
                 
                 <!-- 添加预设模型选择按钮 -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-xl font-bold mb-4">Dire Wolf</h3>
+                    <p class="text-gray-600 mb-4">Showing the beautiful texture of the Dire Wolf</p>
+                    <button id="loadStandardModel" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Switch to Skeletal View</button>
+                </div><!--
                 <div class="flex flex-wrap gap-2 mb-4">
-                    <button id="loadStandardModel" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">加载标准模型</button>
-                    <button id="loadSkeletonModel" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">加载骨架模型</button>
-                </div>
-                
-                <div class="border-t border-gray-200 pt-4">
-                    <h4 class="font-semibold mb-2">上传自定义模型</h4>
+                    <p class="text-gray-600 mb-4">Showing the beautiful texture of the Dire Wolf</p>
+                    <button id="loadStandardModel" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Load Standard Model</button>
+                    <button id="loadSkeletonModel" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Load Skeleton Model</button>
+                </div>-->
+                <!---->
+                <div class="border-t border-gray-200 pt-4" style="display: none;">
+                    <h4 class="font-semibold mb-2">Upload Custom Model</h4>
                     <div class="flex flex-col md:flex-row items-center gap-4">
                         <div class="flex-1">
                             <input type="file" id="modelUpload" accept=".glb,.gltf" class="block w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
                         </div>
-                        <button id="uploadModelBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">上传模型</button>
+                        <button id="uploadModelBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Upload Model</button>
                     </div>
                 </div>
                 
-                <div id="modelInfo" class="mt-4 text-sm text-gray-600 hidden">
+                <div id="modelInfo" class="mt-4 text-sm text-gray-600 hidden" style="display: none;">
                     <div class="bg-gray-100 p-3 rounded">
-                        <h4 class="font-semibold mb-1">模型信息:</h4>
+                        <h4 class="font-semibold mb-1">Model Information:</h4>
                         <ul class="list-disc list-inside" id="modelInfoList">
-                            <li>状态: <span id="modelStatus">未加载</span></li>
-                            <li>三角形: <span id="modelTriangles">0</span></li>
-                            <li>顶点: <span id="modelVertices">0</span></li>
-                            <li>材质: <span id="modelMaterials">0</span></li>
+                            <li>Status: <span id="modelStatus">Not loaded</span></li>
+                            <li>Triangles: <span id="modelTriangles">0</span></li>
+                            <li>Vertices: <span id="modelVertices">0</span></li>
+                            <li>Materials: <span id="modelMaterials">0</span></li>
                         </ul>
                     </div>
                 </div>
             </div>
             
             <!-- Debug Panel (for troubleshooting) -->
-            <div class="bg-white rounded-lg shadow p-4 my-4 border-l-4 border-yellow-500">
+            <div class="bg-white rounded-lg shadow p-4 my-4 border-l-4 border-yellow-500" style="display: none;">
                 <div class="flex justify-between items-center">
                     <h3 class="text-lg font-bold mb-2">Debugging Information</h3>
                     <button id="toggleDebugBtn" class="text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300">Show/Hide</button>
@@ -377,30 +391,30 @@
                 // 重写tryLoadingFromMultiplePaths函数
                 async function tryLoadingFromMultiplePaths(paths, currentIndex = 0) {
                     if (currentIndex >= paths.length) {
-                        console.error('所有路径都加载失败:', paths);
-                        loadingStatus.textContent = '加载模型失败。查看调试面板了解详情。';
+                        console.error('All paths failed to load:', paths);
+                        loadingStatus.textContent = 'Failed to load model. Check debug panel for details.';
                         loadingStatus.style.color = 'red';
                         
-                        // 所有路径都失败，使用简化模型
+                        // All paths failed, use simplified model
                         showFallbackModel();
                         return;
                     }
 
                     const path = paths[currentIndex];
-                    console.log(`尝试从路径加载模型: ${path} (${currentIndex + 1}/${paths.length})`);
+                    console.log(`Attempting to load model from path: ${path} (${currentIndex + 1}/${paths.length})`);
                     
-                    // 直接尝试加载模型，不预先检查文件存在
-                    // 这样可以避免本地文件系统CORS问题
+                    // Directly try to load the model without checking file existence
+                    // This avoids CORS issues with local file system
                     loadModelWithGLTF(path, currentIndex, paths);
                 }
 
                 // Load model with error handling
                 function loadModelWithGLTF(modelPath, currentPathIndex, allPaths) {
-                    console.log(`加载模型: ${modelPath}`);
+                    console.log(`Loading model: ${modelPath}`);
                     
                     // Set a loading timeout (15 seconds)
                     const loadingTimeout = setTimeout(() => {
-                        console.error(`模型加载超时: ${modelPath}`);
+                        console.error(`Model loading timeout: ${modelPath}`);
                         tryLoadingFromMultiplePaths(allPaths, currentPathIndex + 1);
                     }, 15000);
                     
@@ -416,26 +430,26 @@
                             const percentComplete = Math.round((event.loaded / event.total) * 100);
                             progressBar.style.width = `${percentComplete}%`;
                             progressBar.textContent = `${percentComplete}%`;
-                            console.log(`加载进度: ${percentComplete}%`);
+                            console.log(`Loading progress: ${percentComplete}%`);
                         }
                     };
 
                     try {
-                        // 创建GLTFLoader实例
+                        // Create GLTFLoader instance
                         const loader = new ThreeGLTFLoader();
                         
                         loader.load(
                             modelPath,
                             (gltf) => {
                                 clearTimeout(loadingTimeout);
-                                console.log('模型加载成功!');
+                                console.log('Model loaded successfully!');
                                 
                                 // Hide progress
                                 progressContainer.classList.add('hidden');
-                                loadingStatus.textContent = '模型加载成功！';
+                                loadingStatus.textContent = 'Model loaded successfully!';
                                 loadingStatus.style.color = 'green';
                                 
-                                // 清除之前的模型
+                                // Clear previous model
                                 if (model && scene) {
                                     scene.remove(model);
                                 }
@@ -451,7 +465,7 @@
                                 const modelMaterials = document.getElementById('modelMaterials');
                                 
                                 modelInfo.classList.remove('hidden');
-                                modelStatus.textContent = '加载成功';
+                                modelStatus.textContent = 'Loaded successfully';
                                 modelStatus.style.color = 'green';
                                 
                                 // Count triangles, vertices, and materials
@@ -511,6 +525,27 @@
                                 // Update camera 
                                 updateCamera();
                                 
+                                // 确保控制器正确配置
+                                if (controls) {
+                                    console.log('重新配置控制器');
+                                    
+                                    // 允许旋转和缩放
+                                    controls.enableRotate = true;
+                                    controls.enableZoom = true;
+                                    controls.enablePan = false;
+                                    
+                                    // 设置控制器阻尼，使运动更平滑
+                                    controls.enableDamping = true;
+                                    controls.dampingFactor = 0.05;
+                                    
+                                    // 更新控制器目标
+                                    controls.target.copy(new THREE.Vector3(0, 0, 0));
+                                    controls.update();
+                                    
+                                    // 设置默认控制模式
+                                    setControlMode('rotate');
+                                }
+                                
                                 // Start animation if not already running
                                 if (!window.animationFrameId) {
                                     animate();
@@ -524,7 +559,7 @@
                             onProgress,
                             (error) => {
                                 clearTimeout(loadingTimeout);
-                                console.error(`模型加载错误 ${modelPath}:`, error.message);
+                                console.error(`Model loading error ${modelPath}:`, error.message);
                                 progressContainer.classList.add('hidden');
                                 
                                 // Try next path
@@ -533,7 +568,7 @@
                         );
                     } catch (error) {
                         clearTimeout(loadingTimeout);
-                        console.error(`GLTFLoader创建或加载时出错: ${modelPath}`, error);
+                        console.error(`Error creating or loading GLTFLoader: ${modelPath}`, error);
                         progressContainer.classList.add('hidden');
                         
                         // Try next path
@@ -543,35 +578,35 @@
 
                 // Initialize scene and attempt to load model
                 function init() {
-                    console.log('正在初始化3D场景...');
+                    console.log('Initializing 3D scene...');
                     
-                    // 确保调试面板默认显示
+                    // Ensure debug panel is shown by default
                     document.getElementById('debugPanel').classList.remove('hidden');
                     
-                    // 确定基础URL
+                    // Determine base URL
                     const baseUrl = window.location.href.replace(/[^/]*$/, '');
                     
-                    // 创建待尝试路径列表（按优先顺序）
+                    // Create list of paths to try (in priority order)
                     const modelPaths = [
-                        './models/direwolf.glb',        // 首先尝试相对路径到models目录
-                        'models/direwolf.glb',          // 其次尝试models目录
-                        './direwolf.glb',               // 尝试根目录(相对路径)
-                        'direwolf.glb',                 // 尝试根目录
-                        '../models/direwolf.glb',       // 尝试父目录的models
-                        '../direwolf.glb',              // 尝试父目录
-                        baseUrl + 'models/direwolf.glb',// 尝试绝对路径到models
-                        baseUrl + 'direwolf.glb',       // 尝试绝对路径到根目录
-                        '/models/direwolf.glb',         // 尝试服务器根目录
-                        '/direwolf.glb'                 // 尝试服务器根目录
+                        './models/direwolf.glb',        // First try relative path to models directory
+                        'models/direwolf.glb',          // Then try models directory
+                        './direwolf.glb',               // Try root directory (relative path)
+                        'direwolf.glb',                 // Try root directory
+                        '../models/direwolf.glb',       // Try parent directory's models
+                        '../direwolf.glb',              // Try parent directory
+                        baseUrl + 'models/direwolf.glb',// Try absolute path to models
+                        baseUrl + 'direwolf.glb',       // Try absolute path to root directory
+                        '/models/direwolf.glb',         // Try server root directory
+                        '/direwolf.glb'                 // Try server root directory
                     ];
                     
-                    console.log('将尝试的模型路径:', modelPaths);
+                    console.log('Model paths to try:', modelPaths);
                     
-                    // 设置场景、相机、渲染器
+                    // Set scene, camera, renderer
                     scene = new THREE.Scene();
                     scene.background = new THREE.Color(0xf0f0f0);
                     
-                    // 优先使用容器尺寸而非窗口尺寸
+                    // Prefer container size over window size
                     const container = document.getElementById('modelContainer');
                     const containerWidth = container.clientWidth;
                     const containerHeight = container.clientHeight;
@@ -579,22 +614,22 @@
                     camera = new THREE.PerspectiveCamera(45, containerWidth / containerHeight, 0.1, 1000);
                     camera.position.set(0, 0, 10);
                     
-                    // 添加环境光
+                    // Add ambient light
                     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
                     scene.add(ambientLight);
                     
-                    // 添加方向光
+                    // Add directional light
                     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
                     directionalLight.position.set(1, 1, 1);
                     scene.add(directionalLight);
                     
                     try {
-                        // 创建渲染器
+                        // Create renderer
                         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
                         renderer.setSize(containerWidth, containerHeight);
                         renderer.setPixelRatio(window.devicePixelRatio);
                         
-                        // 清除之前的渲染器
+                        // Clear previous renderer
                         const existingCanvas = container.querySelector('canvas');
                         if (existingCanvas) {
                             container.removeChild(existingCanvas);
@@ -602,40 +637,73 @@
                         
                         container.appendChild(renderer.domElement);
                         
-                        // 控制器
+                        // Ensure canvas fills container
+                        renderer.domElement.style.width = '100%';
+                        renderer.domElement.style.height = '100%';
+                        
+                        // Controller
+                        console.log('Initializing controller...');
                         controls = new ThreeOrbitControls(camera, renderer.domElement);
+                        
+                        // Basic configuration
                         controls.enableDamping = true;
                         controls.dampingFactor = 0.05;
+                        controls.screenSpacePanning = true; // More intuitive panning
+                        
+                        // Allow rotation and zooming
+                        controls.enableRotate = true;
+                        controls.enableZoom = true;
+                        controls.enablePan = false;
+                        
+                        // Configure controller other parameters
+                        controls.minDistance = 1; // Minimum zoom distance
+                        controls.maxDistance = 50; // Maximum zoom distance
+                        controls.rotateSpeed = 1.0; // Rotation speed
+                        controls.zoomSpeed = 1.0; // Zoom speed
+                        controls.autoRotate = false; // Disable auto rotation
+                        
+                        console.log('Controller initialized, status:', {
+                            enableRotate: controls.enableRotate,
+                            enableZoom: controls.enableZoom,
+                            enablePan: controls.enablePan,
+                            domElement: controls.domElement ? 'Connected' : 'Not connected'
+                        });
+                        
+                        // Set default mode - Allow rotation and zooming
+                        setControlMode('rotate');
+                        
+                        // Start animation loop
+                        animate();
                     } catch (error) {
-                        console.error('创建渲染器失败:', error);
+                        console.error('Failed to create renderer:', error);
                         loadingStatus.innerHTML = `
                             <div class="loading-container">
-                                <p class="text-red-600 font-bold">WebGL错误</p>
+                                <p class="text-red-600 font-bold">WebGL Error</p>
                                 <p class="text-gray-800">${error.message}</p>
-                                <p class="text-gray-600 mt-2">您的浏览器可能不支持WebGL。</p>
+                                <p class="text-gray-600 mt-2">Your browser may not support WebGL.</p>
                             </div>
                         `;
                         return;
                     }
 
-                    // 重置按钮事件监听
-                    const resetBtn = document.getElementById('resetBtn');
-                    if (resetBtn) {
-                        resetBtn.addEventListener('click', resetControls);
-                    }
+                    // Directly load local model
+                    tryLoadingFromMultiplePaths(modelPaths);
                     
-                    // 加载标准模型按钮
+                    // Handle window resize
+                    window.addEventListener('resize', onWindowResize);
+                    
+                    // Load standard model button
                     const loadStandardBtn = document.getElementById('loadStandardModel');
                     if (loadStandardBtn) {
                         loadStandardBtn.addEventListener('click', () => {
-                            console.log('加载标准模型');
-                            loadingStatus.textContent = '正在加载标准模型...';
+                            console.log('Loading standard model');
+                            loadingStatus.textContent = 'Loading standard model...';
                             
-                            // 获取当前页面的完整路径
+                            // Get current page's full path
                             const currentPath = window.location.pathname;
                             const basePath = currentPath.substring(0, currentPath.lastIndexOf('/') + 1);
                             
-                            // 使用绝对路径
+                            // Use absolute paths
                             const modelPathsToTry = [
                                 basePath + 'models/direwolf.glb',
                                 basePath + 'direwolf.glb',
@@ -643,24 +711,24 @@
                                 'models/direwolf.glb'
                             ];
                             
-                            // 如果已有模型则移除
+                            // Remove existing model if there is one
                             if (model && scene) {
                                 scene.remove(model);
                             }
                             
                             tryLoadingFromMultiplePaths(modelPathsToTry);
                         });
-                        console.log('标准模型按钮事件监听器已添加');
+                        console.log('Standard model button event listener added');
                     } else {
-                        console.error('找不到标准模型按钮元素');
+                        console.error('Standard model button element not found');
                     }
                     
-                    // 加载骨架模型按钮
+                    // Handle SkeletonModel
                     const loadSkeletonBtn = document.getElementById('loadSkeletonModel');
                     if (loadSkeletonBtn) {
                         loadSkeletonBtn.addEventListener('click', () => {
-                            console.log('加载骨架模型');
-                            loadingStatus.textContent = '正在加载骨架模型...';
+                            console.log('loadSkeletonModel');
+                            loadingStatus.textContent = 'Skeleton Model is loading...';
                             
                             // 获取当前页面的完整路径
                             const currentPath = window.location.pathname;
@@ -681,57 +749,48 @@
                             
                             tryLoadingFromMultiplePaths(modelPathsToTry);
                         });
-                        console.log('骨架模型按钮事件监听器已添加');
+                        console.log('Skeleton Model button event listener added');
                     } else {
-                        console.error('找不到骨架模型按钮元素');
-                    }
-                    
-                    // 处理文件上传
+                        console.error('Skeleton Model button element not found');
+                    }                    
+                    // Handle file upload
                     const uploadBtn = document.getElementById('uploadModelBtn');
                     if (uploadBtn) {
                         uploadBtn.addEventListener('click', handleModelUpload);
-                        console.log('上传模型按钮事件监听器已添加');
+                        console.log('Upload model button event listener added');
                     } else {
-                        console.error('找不到上传模型按钮元素');
+                        console.error('Upload model button element not found');
                     }
-                    
-                    // 直接加载本地模型
-                    tryLoadingFromMultiplePaths(modelPaths);
-                    
-                    // 处理窗口大小调整
-                    window.addEventListener('resize', onWindowResize);
-                    
-                    // 添加控制模式按钮的事件监听
-                    document.getElementById('rotateBtn').addEventListener('click', function() {
-                        setControlMode('rotate');
-                    });
-                    
-                    document.getElementById('zoomBtn').addEventListener('click', function() {
-                        setControlMode('zoom');
-                    });
-                    
-                    document.getElementById('panBtn').addEventListener('click', function() {
-                        setControlMode('pan');
-                    });
-                    
-                    document.getElementById('resetBtn').addEventListener('click', resetControls);
                 }
                 
-                // 修改动画循环函数
+                // Modify animation loop function
                 function animate() {
                     try {
                         window.animationFrameId = requestAnimationFrame(animate);
-                        if (controls) controls.update();
+                        if (controls) {
+                            controls.update();
+                            
+                            // Add log to confirm controller status
+                            if (window.debugControlsOnce) {
+                                console.log('Controller status:', {
+                                    enableRotate: controls.enableRotate,
+                                    enableZoom: controls.enableZoom,
+                                    enablePan: controls.enablePan,
+                                    dampingFactor: controls.dampingFactor
+                                });
+                                window.debugControlsOnce = false;
+                            }
+                        }
                         if (renderer && scene && camera) {
                             renderer.render(scene, camera);
                         }
                     } catch (error) {
-                        console.error('动画循环错误:', error);
+                        console.error('Animation loop error:', error);
                         cancelAnimationFrame(window.animationFrameId);
                     }
                 }
 
-                // 添加调试功能：查看THREE.js版本和WebGL信息
+                // Add debugging feature: Check THREE.js version and WebGL information
                 function checkWebGLCapabilities() {
                     try {
                         const canvas = document.createElement('canvas');
@@ -740,7 +799,7 @@
                         if (!gl) {
                             return {
                                 supported: false,
-                                error: 'WebGL不受支持'
+                                error: 'WebGL not supported'
                             };
                         }
                         
@@ -761,35 +820,35 @@
                     }
                 }
 
-                // 添加诊断工具按钮事件处理
+                // Add diagnostic tool button event handling
                 document.addEventListener('DOMContentLoaded', () => {
-                    // 获取WebGL信息
+                    // Get WebGL information
                     const webglInfo = checkWebGLCapabilities();
-                    console.log('WebGL信息:', webglInfo);
+                    console.log('WebGL information:', webglInfo);
                     
-                    // 添加WebGL信息到调试面板
+                    // Add WebGL information to debug panel
                     const debugLog = document.getElementById('debugLog');
                     if (debugLog) {
-                        debugLog.innerHTML += '\n---- WebGL信息 ----\n';
+                        debugLog.innerHTML += '\n---- WebGL Information ----\n';
                         if (webglInfo.supported) {
-                            debugLog.innerHTML += `支持状态: 支持\n`;
-                            debugLog.innerHTML += `供应商: ${webglInfo.vendor}\n`;
-                            debugLog.innerHTML += `渲染器: ${webglInfo.renderer}\n`;
-                            debugLog.innerHTML += `版本: ${webglInfo.version}\n`;
-                            debugLog.innerHTML += `着色语言: ${webglInfo.shadingLanguage}\n`;
+                            debugLog.innerHTML += `Support status: Supported\n`;
+                            debugLog.innerHTML += `Vendor: ${webglInfo.vendor}\n`;
+                            debugLog.innerHTML += `Renderer: ${webglInfo.renderer}\n`;
+                            debugLog.innerHTML += `Version: ${webglInfo.version}\n`;
+                            debugLog.innerHTML += `Shading language: ${webglInfo.shadingLanguage}\n`;
                         } else {
-                            debugLog.innerHTML += `支持状态: 不支持\n`;
-                            debugLog.innerHTML += `错误: ${webglInfo.error}\n`;
+                            debugLog.innerHTML += `Support status: Not supported\n`;
+                            debugLog.innerHTML += `Error: ${webglInfo.error}\n`;
                         }
                     }
                 });
                 
-                // 确保正确执行resetControls函数
+                // Ensure correct execution of resetControls function
                 function resetControls() {
-                    console.log('重置视图');
+                    console.log('Reset view');
                     
                     if (!model || !scene || !camera || !controls) {
-                        console.warn('无法重置 - 模型或场景未初始化');
+                        console.warn('Unable to reset - Model or scene not initialized');
                         return;
                     }
                     
@@ -798,28 +857,28 @@
                         const size = box.getSize(new THREE.Vector3()).length();
                         const center = box.getCenter(new THREE.Vector3());
                         
-                        // 重置模型位置
+                        // Reset model position
                         model.position.x = -center.x;
                         model.position.y = -center.y;
                         model.position.z = -center.z;
                         
-                        // 重置相机位置
+                        // Reset camera position
                         camera.position.copy(center);
                         camera.position.x += size / 2.0;
                         camera.position.y += size / 5.0;
                         camera.position.z += size / 2.0;
                         camera.lookAt(center);
                         
-                        // 重置控制器
+                        // Reset controller
                         controls.reset();
                         
-                        console.log('视图已重置');
+                        console.log('View reset');
                     } catch (error) {
-                        console.error('重置视图失败:', error);
+                        console.error('Reset view failed:', error);
                     }
                 }
                 
-                // 更新onWindowResize函数
+                // Update onWindowResize function
                 function onWindowResize() {
                     try {
                         const container = document.getElementById('modelContainer');
@@ -835,11 +894,11 @@
                             renderer.setSize(width, height);
                         }
                     } catch (error) {
-                        console.error('调整窗口大小失败:', error);
+                        console.error('Failed to resize window:', error);
                     }
                 }
                 
-                // 修复updateCamera函数
+                // Fix updateCamera function
                 function updateCamera() {
                     if (!model || !camera) return;
                     
@@ -855,31 +914,31 @@
                         camera.lookAt(center);
                         camera.updateProjectionMatrix();
                     } catch (error) {
-                        console.error('更新相机失败:', error);
+                        console.error('Failed to update camera:', error);
                     }
                 }
                 
-                // 添加模型注释初始化
+                // Add model annotation initialization
                 function initializeAnnotations(model) {
-                    // 占位函数 - 可以在这里实现模型注释功能
-                    console.log('模型注释初始化');
+                    // Placeholder function - Can be implemented here to add model annotation functionality
+                    console.log('Model annotation initialization');
                 }
                 
                 // Control mode setting function
                 function setControlMode(mode) {
-                    console.log(`切换控制模式: ${mode}`);
+                    console.log(`Switching control mode: ${mode}`);
                     controlMode = mode;
                     
                     if (!controls) {
-                        console.warn('控制器未初始化，无法设置模式');
+                        console.warn('Controller not initialized, unable to set mode');
                         return;
                     }
                     
-                    // 根据控制模式设置控制器旋转、缩放和平移限制
+                    // Set control mode for controller rotation, zooming, and panning restrictions
                     switch(mode) {
                         case 'rotate':
                             controls.enableRotate = true;
-                            controls.enableZoom = false;
+                            controls.enableZoom = true; // Allow zooming
                             controls.enablePan = false;
                             break;
                         case 'zoom':
@@ -894,27 +953,38 @@
                             break;
                     }
                     
-                    // 高亮当前选中的按钮
+                    // Highlight currently selected button
                     document.querySelectorAll('.model-controls button').forEach(btn => {
                         btn.classList.remove('bg-blue-600', 'text-white');
                         btn.classList.add('bg-white', 'text-gray-800');
                     });
                     
-                    document.getElementById(mode + 'Btn').classList.remove('bg-white', 'text-gray-800');
-                    document.getElementById(mode + 'Btn').classList.add('bg-blue-600', 'text-white');
+                    const modeBtn = document.getElementById(mode + 'Btn');
+                    if (modeBtn) {
+                        modeBtn.classList.remove('bg-white', 'text-gray-800');
+                        modeBtn.classList.add('bg-blue-600', 'text-white');
+                    }
+                    
+                    // Show controller status information once
+                    window.debugControlsOnce = true;
+                    
+                    // Force update controller once
+                    if (controls) {
+                        controls.update();
+                    }
                 }
                 
-                // 若所有路径都失败，创建并显示一个彩色的后备模型
+                // If all paths fail, create and display a colored fallback model
                 function showFallbackModel(colorOptions) {
-                    console.log('显示简化后备模型');
+                    console.log('Displaying simplified fallback model');
                     loadingStatus.innerHTML = `
                         <div class="loading-container">
-                            <p class="text-yellow-600 font-bold">使用简化模型</p>
-                            <p class="text-gray-800">显示内置简化版本。</p>
+                            <p class="text-yellow-600 font-bold">Using Simplified Model</p>
+                            <p class="text-gray-800">Displaying built-in simplified version.</p>
                         </div>
                     `;
                     
-                    // 默认颜色设置
+                    // Default color settings
                     const colors = colorOptions || {
                         body: 0x666666,
                         head: 0x555555,
@@ -923,35 +993,35 @@
                     };
                     
                     try {
-                        // 确保场景已初始化
+                        // Ensure scene is initialized
                         if (!scene) {
-                            console.log('场景未初始化，创建新场景');
+                            console.log('Scene not initialized, creating new scene');
                             scene = new THREE.Scene();
                             scene.background = new THREE.Color(0xf0f0f0);
                         }
                         
-                        // 如果已有模型则移除
+                        // Remove existing model if there is one
                         if (model) {
                             scene.remove(model);
                         }
                         
-                        // 创建简单的狼形状
+                        // Create simple wolf shape
                         const group = new THREE.Group();
                         
-                        // 身体
+                        // Body
                         const bodyGeometry = new THREE.BoxGeometry(1.5, 0.8, 0.6);
                         const bodyMaterial = new THREE.MeshStandardMaterial({ color: colors.body });
                         const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
                         group.add(body);
                         
-                        // 头部
+                        // Head
                         const headGeometry = new THREE.BoxGeometry(0.6, 0.5, 0.5);
                         const headMaterial = new THREE.MeshStandardMaterial({ color: colors.head });
                         const head = new THREE.Mesh(headGeometry, headMaterial);
                         head.position.x = 1.0;
                         group.add(head);
                         
-                        // 腿部
+                        // Legs
                         const legGeometry = new THREE.BoxGeometry(0.2, 0.8, 0.2);
                         const legMaterial = new THREE.MeshStandardMaterial({ color: colors.legs });
                         
@@ -971,20 +1041,20 @@
                         backLegRight.position.set(-0.5, -0.8, -0.2);
                         group.add(backLegRight);
                         
-                        // 尾巴
+                        // Tail
                         const tailGeometry = new THREE.BoxGeometry(0.8, 0.1, 0.1);
                         const tailMaterial = new THREE.MeshStandardMaterial({ color: colors.tail });
                         const tail = new THREE.Mesh(tailGeometry, tailMaterial);
                         tail.position.set(-1.0, 0, 0);
-                        tail.rotation.y = -Math.PI / 8; // 使尾巴稍微倾斜
+                        tail.rotation.y = -Math.PI / 8; // Make tail slightly tilted
                         group.add(tail);
                         
-                        // 确保场景中有光源
+                        // Ensure scene has light
                         const existingLights = scene.children.filter(child => 
                             child.isAmbientLight || child.isDirectionalLight);
                             
                         if (existingLights.length === 0) {
-                            console.log('添加光源到场景');
+                            console.log('Adding light to scene');
                             const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
                             scene.add(ambientLight);
                             
@@ -993,47 +1063,65 @@
                             scene.add(directionalLight);
                         }
                         
-                        // 添加模型到场景
+                        // Add model to scene
                         scene.add(group);
                         model = group;
                         
-                        // 确保相机已初始化
+                        // Ensure camera is initialized
                         if (!camera) {
-                            console.log('相机未初始化，创建新相机');
+                            console.log('Camera not initialized, creating new camera');
                             const container = document.getElementById('modelContainer');
                             camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
                         }
                         
-                        // 确保渲染器已初始化
+                        // Ensure renderer is initialized
                         if (!renderer) {
-                            console.log('渲染器未初始化，创建新渲染器');
+                            console.log('Renderer not initialized, creating new renderer');
                             const container = document.getElementById('modelContainer');
                             renderer = new THREE.WebGLRenderer({ antialias: true });
                             renderer.setSize(container.clientWidth, container.clientHeight);
                             container.appendChild(renderer.domElement);
                         }
                         
-                        // 确保控制器已初始化
+                        // Ensure controller is initialized
                         if (!controls && renderer) {
-                            console.log('控制器未初始化，创建新控制器');
+                            console.log('Controller not initialized, creating new controller');
                             controls = new ThreeOrbitControls(camera, renderer.domElement);
                             controls.enableDamping = true;
                             controls.dampingFactor = 0.05;
+                            controls.screenSpacePanning = true;
+                            
+                            // Allow rotation and zooming
+                            controls.enableRotate = true;
+                            controls.enableZoom = true;
+                            controls.enablePan = false;
+                            
+                            // Configure controller other parameters
+                            controls.minDistance = 2;
+                            controls.maxDistance = 20;
+                            controls.rotateSpeed = 1.0;
+                            controls.zoomSpeed = 1.0;
+                        } else if (controls) {
+                            // Reconfigure existing controller
+                            controls.enableRotate = true;
+                            controls.enableZoom = true;
+                            controls.enablePan = false;
+                            controls.update();
                         }
                         
-                        // 调整相机位置
+                        // Adjust camera position
                         camera.position.set(3, 1.5, 3);
                         camera.lookAt(0, 0, 0);
                         
-                        // 设置默认控制模式
+                        // Set default control mode
                         setControlMode('rotate');
                         
-                        // 确保动画循环在运行
+                        // Ensure animation loop is running
                         if (!window.animationFrameId) {
                             animate();
                         }
                         
-                        // 显示模型信息
+                        // Show model information
                         const modelInfo = document.getElementById('modelInfo');
                         const modelStatus = document.getElementById('modelStatus');
                         const modelTriangles = document.getElementById('modelTriangles');
@@ -1042,93 +1130,203 @@
                         
                         if (modelInfo && modelStatus && modelTriangles && modelVertices && modelMaterials) {
                             modelInfo.classList.remove('hidden');
-                            modelStatus.textContent = '使用简化模型';
+                            modelStatus.textContent = 'Using simplified model';
                             modelStatus.style.color = 'orange';
                             modelTriangles.textContent = '32';
                             modelVertices.textContent = '56';
                             modelMaterials.textContent = '2';
                         }
                         
-                        console.log('简化模型已创建并显示');
+                        console.log('Simplified model created and displayed');
                         return true;
                     } catch (error) {
-                        console.error('创建简化模型失败:', error);
-                        loadingStatus.innerHTML += `<p class="text-red-600">创建简化模型失败: ${error.message}</p>`;
+                        console.error('Failed to create simplified model:', error);
+                        loadingStatus.innerHTML += `<p class="text-red-600">Failed to create simplified model: ${error.message}</p>`;
                         return false;
                     }
                 }
 
-                // 修改文件上传处理
+                // Add model file upload processing function
                 function handleModelUpload() {
                     const fileInput = document.getElementById('modelUpload');
                     const file = fileInput.files[0];
                     
-                    console.log('处理模型上传');
+                    console.log('Processing model upload');
                     
                     if (file) {
-                        console.log(`正在加载上传的模型: ${file.name}`);
-                        loadingStatus.textContent = `正在加载上传的模型: ${file.name}`;
+                        console.log(`Loading uploaded model: ${file.name}`);
+                        loadingStatus.textContent = `Loading uploaded model: ${file.name}`;
                         
-                        // 为上传的文件创建URL
+                        // Create URL for uploaded file
                         try {
                             const fileURL = URL.createObjectURL(file);
                             
-                            // 如果已有模型则移除
+                            // Remove existing model if there is one
                             if (model && scene) {
                                 scene.remove(model);
                             }
                             
-                            // 直接加载模型，不需要检查文件是否存在
+                            // Load model directly, no need to check if file exists
                             loadModelWithGLTF(fileURL, 0, [fileURL]);
                         } catch (error) {
-                            console.error('创建对象URL出错:', error);
+                            console.error('Error creating object URL:', error);
                             loadingStatus.innerHTML = `
                                 <div class="loading-container">
-                                    <p class="text-red-600 font-bold">文件加载错误</p>
+                                    <p class="text-red-600 font-bold">File Loading Error</p>
                                     <p class="text-gray-800">${error.message}</p>
                                 </div>
                             `;
                         }
                     } else {
-                        alert('请选择GLB或GLTF文件上传');
+                        alert('Please select a GLB or GLTF file to upload');
                     }
                 }
 
-                // 确保直接从页面加载开始就显示内容
+                // Ensure content is displayed from the start when directly loaded from the page
                 window.addEventListener('DOMContentLoaded', () => {
-                    // 初始化
-                    console.log('DOM完全加载，开始初始化...');
+                    // Initialize
+                    console.log('DOM fully loaded, starting initialization...');
+                    
+                    // Add control button event listeners
+                    const rotateBtnEl = document.getElementById('rotateBtn');
+                    const zoomBtnEl = document.getElementById('zoomBtn');
+                    const panBtnEl = document.getElementById('panBtn');
+                    const resetBtnEl = document.getElementById('resetBtn');
+                    
+                    if (rotateBtnEl) {
+                        rotateBtnEl.addEventListener('click', function() {
+                            console.log('Clicked rotation button');
+                            setControlMode('rotate');
+                        });
+                    } else {
+                        console.error('Rotation button element not found');
+                    }
+                    
+                    if (zoomBtnEl) {
+                        zoomBtnEl.addEventListener('click', function() {
+                            console.log('Clicked zoom button');
+                            setControlMode('zoom');
+                        });
+                    } else {
+                        console.error('Zoom button element not found');
+                    }
+                    
+                    if (panBtnEl) {
+                        panBtnEl.addEventListener('click', function() {
+                            console.log('Clicked pan button');
+                            setControlMode('pan');
+                        });
+                    } else {
+                        console.error('Pan button element not found');
+                    }
+                    
+                    if (resetBtnEl) {
+                        resetBtnEl.addEventListener('click', function() {
+                            console.log('Clicked reset button');
+                            resetControls();
+                        });
+                    } else {
+                        console.error('Reset button element not found');
+                    }
+                    
                     init();
                     
-                    // 检查按钮是否正确监听事件
+                    // Check if buttons are correctly listening to events
                     setTimeout(() => {
                         const testButtons = ['loadStandardModel', 'loadSkeletonModel', 'uploadModelBtn'];
                         testButtons.forEach(id => {
                             const btn = document.getElementById(id);
                             if (btn) {
-                                console.log(`按钮 ${id} 存在`);
-                                // 添加测试点击效果
+                                console.log(`Button ${id} exists`);
+                                // Add test click effect
                                 btn.addEventListener('mousedown', function() {
-                                    this.style.backgroundColor = '#3b82f6'; // 点击时变色
+                                    this.style.backgroundColor = '#3b82f6'; // Change color on click
                                 });
                                 btn.addEventListener('mouseup', function() {
-                                    this.style.backgroundColor = '#2563eb'; // 松开时恢复
+                                    this.style.backgroundColor = '#2563eb'; // Restore color on release
                                 });
                             } else {
-                                console.error(`按钮 ${id} 不存在`);
+                                console.error(`Button ${id} not found`);
+                            }
+                        });
+                        
+                        // Add event listeners for buttons in View Options section
+                        const viewOptionsButtons = document.querySelectorAll('.grid button');
+                        viewOptionsButtons.forEach(button => {
+                            console.log('View Options button:', button.textContent);
+                            
+                            // If button ID is already set to loadSkeletonModel, no need to repeat listener
+                            if (button.id === 'loadSkeletonModel') {
+                                console.log('Skipping existing ID button:', button.id);
+                                return;
+                            }
+                            
+                            // Determine function based on button text
+                            const buttonText = button.textContent.trim();
+                            if (buttonText.includes('Skeletal') || buttonText.includes('骨架')) {
+                                button.id = 'loadSkeletonModel'; // Set ID
+                                button.addEventListener('click', () => {
+                                    console.log('Loading skeleton model');
+                                    loadingStatus.textContent = 'Loading skeleton model...';
+                                    
+                                    // Get current page's full path
+                                    const currentPath = window.location.pathname;
+                                    const basePath = currentPath.substring(0, currentPath.lastIndexOf('/') + 1);
+                                    
+                                    // Use absolute paths
+                                    const modelPathsToTry = [
+                                        basePath + 'models/direwolf-skeleton.glb',
+                                        basePath + 'direwolf-skeleton.glb',
+                                        './models/direwolf-skeleton.glb',
+                                        'models/direwolf-skeleton.glb'
+                                    ];
+                                    
+                                    // Remove existing model if there is one
+                                    if (model && scene) {
+                                        scene.remove(model);
+                                    }
+                                    
+                                    tryLoadingFromMultiplePaths(modelPathsToTry);
+                                });
+                                console.log('Added event listener for skeleton view button');
+                            } else if (buttonText.includes('Muscular') || buttonText.includes('肌肉')) {
+                                button.addEventListener('click', () => {
+                                    console.log('Display muscular model');
+                                    alert('Muscular model feature is under development');
+                                });
+                            } else if (buttonText.includes('External') || buttonText.includes('外观')) {
+                                button.addEventListener('click', () => {
+                                    console.log('Display external model');
+                                    alert('External model feature is under development');
+                                });
+                            } else if (buttonText.includes('Walking') || buttonText.includes('行走')) {
+                                button.addEventListener('click', () => {
+                                    console.log('Play walking animation');
+                                    alert('Walking animation feature is under development');
+                                });
+                            } else if (buttonText.includes('Running') || buttonText.includes('奔跑')) {
+                                button.addEventListener('click', () => {
+                                    console.log('Play running animation');
+                                    alert('Running animation feature is under development');
+                                });
+                            } else if (buttonText.includes('Hunting') || buttonText.includes('捕猎')) {
+                                button.addEventListener('click', () => {
+                                    console.log('Play hunting animation');
+                                    alert('Hunting animation feature is under development');
+                                });
                             }
                         });
                     }, 1000);
                     
-                    // 如果5秒后仍未看到模型，显示简化版本
+                    // If 5 seconds pass without seeing model, display simplified version
                     setTimeout(() => {
                         if (!model || !scene.children.some(child => child === model)) {
-                            console.log('5秒后未检测到模型，显示简化版本');
+                            console.log('No model detected after 5 seconds, displaying simplified version');
                             showFallbackModel({
-                                body: 0x8B4513,   // 棕色
-                                head: 0x6B4226,   // 深棕色
-                                legs: 0x8B4513,   // 棕色
-                                tail: 0x8B4513    // 棕色
+                                body: 0x8B4513,   // Brown
+                                head: 0x6B4226,   // Dark brown
+                                legs: 0x8B4513,   // Brown
+                                tail: 0x8B4513    // Brown
                             });
                         }
                     }, 5000);
@@ -1143,7 +1341,7 @@
                 <div class="bg-white rounded-lg shadow-lg p-6">
                     <h3 class="text-xl font-bold mb-4">Skeletal View</h3>
                     <p class="text-gray-600 mb-4">Examine the complete skeletal structure and unique anatomical features of the Dire Wolf</p>
-                    <button class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Switch to Skeletal View</button>
+                    <button id="loadSkeletonModel" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Switch to Skeletal View</button>
                 </div>
                 <div class="bg-white rounded-lg shadow-lg p-6">
                     <h3 class="text-xl font-bold mb-4">Muscular View</h3>
