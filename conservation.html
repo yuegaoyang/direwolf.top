@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动物保护与进化教育 - 恐狼教育</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+        }
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: #e5e7eb;
+        }
+        .timeline-item {
+            position: relative;
+            padding-bottom: 2rem;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -2.5rem;
+            top: 0.5rem;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 50%;
+            background-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- 导航栏 -->
+    <nav class="bg-gray-900 text-white p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="text-2xl font-bold">Dire Wolf Education</div>
+            <div class="hidden md:flex space-x-6">
+                <a href="index.html" class="hover:text-gray-300">Home</a>
+                <a href="science.html" class="hover:text-gray-300">Science</a>
+                <a href="model.html" class="hover:text-gray-300">3D Models</a>
+                <a href="fossil.html" class="hover:text-gray-300">Fossils</a>
+                <a href="games.html" class="hover:text-gray-300">Games</a>
+                <a href="conservation.html" class="text-blue-400 hover:text-blue-300">Conservation</a>
+            </div>
+            <div class="md:hidden">
+                <button class="text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 页面标题 -->
+    <header class="bg-gray-800 text-white py-16">
+        <div class="container mx-auto px-4">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4">动物保护与进化教育</h1>
+            <p class="text-xl text-gray-300">从恐狼灭绝看现代动物保护</p>
+        </div>
+    </header>
+
+    <!-- 主要内容 -->
+    <main class="container mx-auto px-4 py-12">
+        <!-- 进化与灭绝 -->
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold mb-8">进化与灭绝</h2>
+            <div class="bg-white rounded-lg shadow-lg p-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">犬科动物进化树</h3>
+                        <div class="aspect-w-16 aspect-h-9 mb-4">
+                            <!-- 这里将放置进化树图表 -->
+                            <div class="bg-gray-200 rounded-lg h-64 flex items-center justify-center">
+                                <p class="text-gray-500">进化树图表加载中...</p>
+                            </div>
+                        </div>
+                        <p class="text-gray-600">恐狼在犬科动物进化树上的位置，以及与其他犬科动物的关系。</p>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">灭绝过程分析</h3>
+                        <div class="timeline">
+                            <div class="timeline-item">
+                                <h4 class="font-bold mb-2">12.5万年前</h4>
+                                <p class="text-gray-600">恐狼开始出现在北美大陆</p>
+                            </div>
+                            <div class="timeline-item">
+                                <h4 class="font-bold mb-2">1.2万年前</h4>
+                                <p class="text-gray-600">最后一次冰期结束，气候开始变暖</p>
+                            </div>
+                            <div class="timeline-item">
+                                <h4 class="font-bold mb-2">1万年前</h4>
+                                <p class="text-gray-600">恐狼最终灭绝</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 现代灭绝危机 -->
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold mb-8">现代灭绝危机</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-xl font-bold mb-4">气候变化影响</h3>
+                    <p class="text-gray-600 mb-4">全球变暖导致栖息地减少，物种分布范围改变，与恐狼灭绝时期的气候变化有相似之处。</p>
+                    <a href="#" class="text-blue-600 hover:text-blue-800">了解更多 →</a>
+                </div>
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-xl font-bold mb-4">栖息地破坏</h3>
+                    <p class="text-gray-600 mb-4">人类活动导致的栖息地破坏，使许多物种面临生存威胁，这与恐狼时期的环境变化有相似之处。</p>
+                    <a href="#" class="text-blue-600 hover:text-blue-800">了解更多 →</a>
+                </div>
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-xl font-bold mb-4">物种入侵</h3>
+                    <p class="text-gray-600 mb-4">外来物种入侵导致生态平衡被破坏，这与恐狼时期新物种的竞争有相似之处。</p>
+                    <a href="#" class="text-blue-600 hover:text-blue-800">了解更多 →</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 现代狼保护 -->
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold mb-8">现代狼保护</h2>
+            <div class="bg-white rounded-lg shadow-lg p-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">保护现状</h3>
+                        <ul class="list-disc list-inside text-gray-600 space-y-2">
+                            <li>全球狼类种群数量持续下降</li>
+                            <li>栖息地碎片化严重</li>
+                            <li>人狼冲突加剧</li>
+                            <li>保护措施逐步加强</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">保护成功案例</h3>
+                        <ul class="list-disc list-inside text-gray-600 space-y-2">
+                            <li>黄石国家公园狼群重建</li>
+                            <li>欧洲狼类种群恢复</li>
+                            <li>中国狼类保护区的建立</li>
+                            <li>社区参与保护项目</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 教育资源 -->
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold mb-8">教育资源</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-xl font-bold mb-4">小学课程</h3>
+                    <p class="text-gray-600 mb-4">适合小学生的恐狼知识普及和动物保护意识培养课程。</p>
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">下载资源</button>
+                </div>
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-xl font-bold mb-4">中学课程</h3>
+                    <p class="text-gray-600 mb-4">适合中学生的进化论和动物保护深入课程。</p>
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">下载资源</button>
+                </div>
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-xl font-bold mb-4">教师资源包</h3>
+                    <p class="text-gray-600 mb-4">包含教案、课件和活动指南的完整教学资源包。</p>
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">下载资源</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 互动体验 -->
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold mb-8">互动体验</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="bg-white rounded-lg shadow-lg p-8">
+                    <h3 class="text-xl font-bold mb-4">生态系统模拟器</h3>
+                    <p class="text-gray-600 mb-4">通过互动模拟，了解顶级掠食者消失对生态系统的影响。</p>
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">开始模拟</button>
+                </div>
+                <div class="bg-white rounded-lg shadow-lg p-8">
+                    <h3 class="text-xl font-bold mb-4">保护承诺墙</h3>
+                    <p class="text-gray-600 mb-4">分享你对动物保护的承诺，激励更多人参与保护行动。</p>
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">发表承诺</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-gray-900 text-white py-12">
+        <div class="container mx-auto px-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div>
+                    <h3 class="text-xl font-bold mb-4">About Us</h3>
+                    <p class="text-gray-400">Dedicated to spreading knowledge about Dire Wolves and promoting paleontological education</p>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold mb-4">Quick Links</h3>
+                    <ul class="space-y-2">
+                        <li><a href="index.html" class="text-gray-400 hover:text-white">Home</a></li>
+                        <li><a href="science.html" class="text-gray-400 hover:text-white">Science</a></li>
+                        <li><a href="model.html" class="text-gray-400 hover:text-white">3D Models</a></li>
+                        <li><a href="fossil.html" class="text-gray-400 hover:text-white">Fossils</a></li>
+                        <li><a href="games.html" class="text-gray-400 hover:text-white">Games</a></li>
+                        <li><a href="conservation.html" class="text-blue-400 hover:text-blue-300">Conservation</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold mb-4">Contact Us</h3>
+                    <p class="text-gray-400">Email: contact@direwolf.edu</p>
+                    <p class="text-gray-400">Phone: +86 123 4567 8900</p>
+                </div>
+            </div>
+            <div class="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+                <p>© 2024 Dire Wolf Education. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html> 
