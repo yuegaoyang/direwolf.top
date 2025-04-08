@@ -21,8 +21,8 @@
     <script type="importmap">
     {
         "imports": {
-            "three": "https://unpkg.com/three@0.151.3/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.151.3/examples/jsm/"
+            "three": "https://cdn.jsdelivr.net/npm/three@0.139.2/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.139.2/examples/jsm/"
         }
     }
     </script>
@@ -32,7 +32,7 @@
             font-family: 'Noto Sans SC', sans-serif;
         }
         .model-container {
-            height: 500px;
+            height: 700px;
             background-color: #f3f4f6;
             border-radius: 0.5rem;
             position: relative;
@@ -48,7 +48,7 @@
             border-radius: 0.5rem;
             display: flex;
             gap: 0.5rem;
-            z-index: 10; /* 确保控制按钮在最上层 */
+            z-index: 100; /* 增加z-index确保控制按钮在最上层 */
         }
         /* 添加鼠标样式 */
         #modelContainer {
@@ -195,7 +195,13 @@
             <div class="bg-white rounded-lg shadow p-4 my-4 border-l-4 border-yellow-500" style="display: none;">
                 <div class="flex justify-between items-center">
                     <h3 class="text-lg font-bold mb-2">Debugging Information</h3>
-                    <button id="toggleDebugBtn" class="text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300">Show/Hide</button>
+                    <div>
+                        <button id="testInteractionBtn" class="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 mr-2">Test Interaction</button>
+                        <button id="toggleDebugBtn" class="text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300">Show/Hide</button>
+                    </div>
+                </div>
+                <div id="interactionStatus" class="bg-gray-100 p-2 rounded mb-2 text-center">
+                    <p class="text-red-600 font-bold">Please move and click in the 3D area to check for interaction logs</p>
                 </div>
                 <div id="debugPanel" class="hidden">
                     <div class="bg-gray-100 p-3 rounded text-xs font-mono overflow-auto max-h-64 mb-2">
@@ -225,24 +231,881 @@
                 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
                 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
                 
-                // 全局保存导入的构造函数
-                const ThreeOrbitControls = OrbitControls;
-                const ThreeGLTFLoader = GLTFLoader; // 保存GLTFLoader构造函数
+                // 将THREE设置为全局对象，以便在其他地方访问
+                window.THREE = THREE;
                 
-                // Initialize Three.js scene
-                let scene, camera, renderer, controls, model;
+                // Initialize Three.js scene - 使用window对象使变量全局可访问
+                window.scene = null;
+                window.camera = null;
+                window.renderer = null; 
+                window.controls = null;
+                window.model = null;
+                window.animationRunning = false;
+                
+                // 其他局部变量
                 let controlMode = 'rotate'; // Default control mode is rotation
-                let loadingStatus = document.getElementById('loadingText');
+                let loadingStatus = null; // 初始化为null，稍后再获取
+                
+                // 获取loadingStatus元素，如果不存在则创建一个
+                function getLoadingStatus() {
+                    if (!loadingStatus) {
+                        loadingStatus = document.getElementById('loadingText');
+                        if (!loadingStatus) {
+                            // 如果找不到元素，尝试在modelContainer中创建一个
+                            const container = document.getElementById('modelContainer');
+                            if (container) {
+                                loadingStatus = document.createElement('div');
+                                loadingStatus.id = 'loadingText';
+                                loadingStatus.className = 'absolute inset-0 flex items-center justify-center z-10';
+                                loadingStatus.innerHTML = `
+                                    <div class="loading-container">
+                                        <div class="loader"></div>
+                                        <p class="text-xl font-bold text-gray-800">Loading 3D Model...</p>
+                                        <p class="text-gray-600 mt-2">Please wait, this may take a few seconds</p>
+                                    </div>
+                                `;
+                                container.appendChild(loadingStatus);
+                            }
+                        }
+                    }
+                    return loadingStatus;
+                }
+                
+                // 设置加载状态信息
+                function setLoadingStatus(message, color = 'white') {
+                    const statusEl = getLoadingStatus();
+                    if (statusEl) {
+                        statusEl.textContent = message;
+                        statusEl.style.color = color;
+                    }
+                }
                 
                 // Debug functionality
                 let debugLog = [];
                 
-                // Custom console logger to capture debug info
+                // 全局监听鼠标移动事件
+                document.addEventListener('mousemove', function(event) {
+                    console.log("Mouse move detected, coordinates:", event.clientX, event.clientY);
+                });
+                
+                // 确保window完全加载后初始化
+                window.onload = function() {
+                    console.log("Window fully loaded - initializing 3D scene");
+                    debugLog.push({type: 'log', message: "Window fully loaded - initializing 3D scene", time: new Date().toISOString()});
+                    updateDebugPanel();
+                    
+                    // 首先检查并确保modelContainer存在
+                    ensureModelContainerExists();
+                    
+                    // 然后初始化Three.js
+                    initializeThreeJS();
+                };
+
+                // 确保modelContainer元素存在
+                function ensureModelContainerExists() {
+                    let container = document.getElementById('modelContainer');
+                    
+                    if (!container) {
+                        console.warn("找不到modelContainer元素，正在创建一个新的...");
+                        
+                        // 查找主要内容区域
+                        const mainContent = document.querySelector('main') || document.body;
+                        
+                        // 创建新的容器
+                        container = document.createElement('div');
+                        container.id = 'modelContainer';
+                        container.className = 'model-container';
+                        container.style.width = '100%';
+                        container.style.height = '700px';
+                        container.style.backgroundColor = '#f3f4f6';
+                        container.style.borderRadius = '0.5rem';
+                        container.style.position = 'relative';
+                        container.style.overflow = 'hidden';
+                        
+                        // 创建加载状态元素
+                        const loadingText = document.createElement('div');
+                        loadingText.id = 'loadingText';
+                        loadingText.className = 'absolute inset-0 flex items-center justify-center z-10';
+                        loadingText.innerHTML = `
+                            <div class="loading-container">
+                                <div class="loader"></div>
+                                <p class="text-xl font-bold text-gray-800">Loading 3D Model...</p>
+                                <p class="text-gray-600 mt-2">Please wait, this may take a few seconds</p>
+                            </div>
+                        `;
+                        container.appendChild(loadingText);
+                        
+                        // 创建进度条容器
+                        const progressContainer = document.createElement('div');
+                        progressContainer.id = 'progressContainer';
+                        progressContainer.className = 'absolute bottom-16 left-0 right-0 mx-8 hidden';
+                        
+                        const progressBar = document.createElement('div');
+                        progressBar.className = 'progress-container';
+                        progressBar.innerHTML = '<div id="progressBar" class="progress-bar" style="width: 0%">0%</div>';
+                        progressContainer.appendChild(progressBar);
+                        container.appendChild(progressContainer);
+                        
+                        // 创建控制按钮
+                        const controlsDiv = document.createElement('div');
+                        controlsDiv.className = 'model-controls';
+                        controlsDiv.innerHTML = `
+                            <button id="rotateBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">Rotate</button>
+                            <button id="zoomBtn" class="bg-white text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition">Zoom</button>
+                            <button id="panBtn" class="bg-white text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition">Pan</button>
+                            <button id="resetBtn" class="bg-white text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition">Reset</button>
+                        `;
+                        container.appendChild(controlsDiv);
+                        
+                        // 将容器添加到页面中
+                        const firstSection = mainContent.querySelector('section');
+                        if (firstSection) {
+                            firstSection.insertBefore(container, firstSection.firstChild);
+                        } else {
+                            mainContent.insertBefore(container, mainContent.firstChild);
+                        }
+                        
+                        console.log("成功创建modelContainer元素");
+                    }
+                    
+                    return container;
+                }
+
+                // 创建一个CSS备用的3D显示
+                function createFallbackDisplay() {
+                    console.log("创建CSS备用3D显示");
+                    try {
+                        // 查找容器元素
+                        const container = document.getElementById('modelContainer') || document.createElement('div');
+                        
+                        // 清除容器内容
+                        while (container.firstChild) {
+                            container.removeChild(container.firstChild);
+                        }
+                        
+                        // 设置容器样式
+                        container.style.width = '100%';
+                        container.style.height = '700px';
+                        container.style.position = 'relative';
+                        container.style.backgroundColor = '#f3f4f6';
+                        container.style.perspective = '1000px';
+                        container.style.display = 'flex';
+                        container.style.justifyContent = 'center';
+                        container.style.alignItems = 'center';
+                        
+                        // 创建CSS 3D立方体
+                        const cube = document.createElement('div');
+                        cube.style.width = '100px';
+                        cube.style.height = '100px';
+                        cube.style.transformStyle = 'preserve-3d';
+                        cube.style.transform = 'rotateX(45deg) rotateY(45deg)';
+                        cube.style.animation = 'spin 8s infinite linear';
+                        
+                        // 添加动画样式
+                        const style = document.createElement('style');
+                        style.textContent = `
+                            @keyframes spin {
+                                from { transform: rotateX(0) rotateY(0); }
+                                to { transform: rotateX(360deg) rotateY(360deg); }
+                            }
+                        `;
+                        document.head.appendChild(style);
+                        
+                        // 创建立方体的6个面
+                        const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
+                        const positions = [
+                            'translateZ(50px)',
+                            'translateZ(-50px) rotateY(180deg)',
+                            'translateX(50px) rotateY(90deg)',
+                            'translateX(-50px) rotateY(-90deg)',
+                            'translateY(50px) rotateX(90deg)',
+                            'translateY(-50px) rotateX(-90deg)'
+                        ];
+                        
+                        for (let i = 0; i < 6; i++) {
+                            const face = document.createElement('div');
+                            face.style.position = 'absolute';
+                            face.style.width = '100px';
+                            face.style.height = '100px';
+                            face.style.backgroundColor = colors[i];
+                            face.style.transform = positions[i];
+                            face.style.display = 'flex';
+                            face.style.justifyContent = 'center';
+                            face.style.alignItems = 'center';
+                            face.style.border = '1px solid white';
+                            face.style.fontWeight = 'bold';
+                            face.style.color = 'white';
+                            face.textContent = '3D';
+                            
+                            cube.appendChild(face);
+                        }
+                        
+                        // 添加文本说明
+                        const message = document.createElement('div');
+                        message.style.position = 'absolute';
+                        message.style.bottom = '20px';
+                        message.style.width = '100%';
+                        message.style.textAlign = 'center';
+                        message.style.color = 'red';
+                        message.style.fontWeight = 'bold';
+                        message.innerHTML = 'Unable to initialize WebGL 3D environment, showing CSS fallback content<br>Please try using a modern browser with WebGL support';
+                        
+                        // 将元素添加到容器
+                        container.appendChild(cube);
+                        container.appendChild(message);
+                        
+                        // 如果容器还不在文档中，添加到body
+                        if (!document.getElementById('modelContainer')) {
+                            document.body.appendChild(container);
+                        }
+                        
+                        console.log("CSS备用3D显示创建成功");
+                        return true;
+                    } catch (error) {
+                        console.error("创建CSS备用显示失败:", error);
+                        return false;
+                    }
+                }
+
+                function initializeThreeJS() {
+                    try {
+                        // 获取容器元素并进行严格检查
+                        const container = document.getElementById('modelContainer');
+                        console.log("Container element:", container ? "Found" : "Not found");
+                        
+                        if (!container) {
+                            console.warn("Model container element (#modelContainer) not found, attempting to create a new one");
+                            ensureModelContainerExists();
+                        }
+                        
+                        // Ensure container has valid dimensions
+                        if (container.clientWidth <= 0 || container.clientHeight <= 0) {
+                            console.warn("Container dimensions invalid:", container.clientWidth, container.clientHeight);
+                            // Force set default dimensions
+                            container.style.width = '100%';
+                            container.style.height = '700px';
+                            container.style.position = 'relative';
+                            container.style.backgroundColor = '#f0f0f0';
+                            container.style.display = 'block';
+                            
+                            // If dimensions are still 0 after setting, use hardcoded defaults
+                            const containerWidth = container.clientWidth || 800; 
+                            const containerHeight = container.clientHeight || 700;
+                            console.log("Using adjusted container dimensions:", containerWidth, containerHeight);
+                        } else {
+                            console.log("Container dimensions normal:", container.clientWidth, container.clientHeight);
+                            // Force set container style and size
+                            container.style.width = '100%';
+                            container.style.height = '700px';
+                            container.style.position = 'relative';
+                        }
+                        
+                        // 创建场景
+                        window.scene = new THREE.Scene();
+                        window.scene.background = new THREE.Color(0xf3f4f6);
+                        
+                        // 创建相机 - 使用安全的尺寸计算
+                        // 直接使用硬编码的默认尺寸值而不是尝试从容器获取
+                        const containerWidth = 800;  // 使用固定宽度
+                        const containerHeight = 700; // 使用固定高度
+                        const aspectRatio = containerWidth / containerHeight;
+                        console.log("Using fixed dimensions:", containerWidth, containerHeight, "aspect ratio:", aspectRatio);
+                        
+                        window.camera = new THREE.PerspectiveCamera(45, aspectRatio, 0.1, 1000);
+                        window.camera.position.set(0, 0, 10);
+                        
+                        // 添加光源
+                        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+                        window.scene.add(ambientLight);
+                        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                        directionalLight.position.set(1, 1, 1);
+                        window.scene.add(directionalLight);
+                        
+                        // 创建渲染器
+                        try {
+                            // 创建渲染器时不使用现有的canvas，直接创建新的
+                            window.renderer = new THREE.WebGLRenderer({ 
+                                antialias: true, 
+                                alpha: true
+                            });
+                            
+                            // 使用固定尺寸设置渲染器
+                            window.renderer.setPixelRatio(window.devicePixelRatio);
+                            window.renderer.setSize(containerWidth, containerHeight);
+                            
+                            // 如果此时container元素存在，将canvas添加到容器中
+                            const container = document.getElementById('modelContainer');
+                            if (container) {
+                                // 清除容器中现有的canvas
+                                while (container.firstChild) {
+                                    container.removeChild(container.firstChild);
+                                }
+                                
+                                // 添加新的canvas
+                                container.appendChild(window.renderer.domElement);
+                                
+                                // 确保canvas大小正确
+                                window.renderer.domElement.style.width = '100%';
+                                window.renderer.domElement.style.height = '100%';
+                                
+                                // 重新创建控制按钮
+                                const controlsDiv = document.createElement('div');
+                                controlsDiv.className = 'model-controls';
+                                controlsDiv.innerHTML = `
+                                    <button id="rotateBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">Rotate</button>
+                                    <button id="zoomBtn" class="bg-white text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition">Zoom</button>
+                                    <button id="panBtn" class="bg-white text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition">Pan</button>
+                                    <button id="resetBtn" class="bg-white text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition">Reset</button>
+                                `;
+                                container.appendChild(controlsDiv);
+                                
+                                // 添加按钮事件监听器
+                                const rotateBtn = controlsDiv.querySelector('#rotateBtn');
+                                const zoomBtn = controlsDiv.querySelector('#zoomBtn');
+                                const panBtn = controlsDiv.querySelector('#panBtn');
+                                const resetBtn = controlsDiv.querySelector('#resetBtn');
+                                
+                                if (rotateBtn) rotateBtn.addEventListener('click', () => setControlMode('rotate'));
+                                if (zoomBtn) zoomBtn.addEventListener('click', () => setControlMode('zoom'));
+                                if (panBtn) panBtn.addEventListener('click', () => setControlMode('pan'));
+                                if (resetBtn) resetBtn.addEventListener('click', () => setControlMode('reset'));
+                                
+                            } else {
+                                // 如果找不到容器，创建一个临时的div来包含canvas
+                                console.warn("modelContainer not found, creating temporary container");
+                                const tempContainer = document.createElement('div');
+                                tempContainer.id = 'tempModelContainer';
+                                tempContainer.style.width = containerWidth + 'px';
+                                tempContainer.style.height = containerHeight + 'px';
+                                tempContainer.style.position = 'relative';
+                                tempContainer.style.margin = '0 auto';
+                                tempContainer.style.backgroundColor = '#f3f4f6';
+                                
+                                // 添加canvas到临时容器
+                                tempContainer.appendChild(window.renderer.domElement);
+                                
+                                // 添加临时容器到body
+                                document.body.appendChild(tempContainer);
+                            }
+                            
+                            console.log("Renderer created successfully, dimensions:", window.renderer.getSize(new THREE.Vector2()));
+                        } catch (error) {
+                            console.error("Failed to create renderer:", error);
+                            throw new Error("Failed to create WebGL renderer: " + error.message);
+                        }
+
+                        // 直接在canvas上添加鼠标事件监听器
+                        try {
+                            window.renderer.domElement.addEventListener('mousedown', function(event) {
+                                console.log("Canvas mousedown:", event.clientX, event.clientY);
+                                window.renderer.domElement.style.cursor = 'grabbing';
+                            });
+                            
+                            window.renderer.domElement.addEventListener('mouseup', function(event) {
+                                console.log("Canvas mouseup:", event.clientX, event.clientY);
+                                window.renderer.domElement.style.cursor = 'grab';
+                            });
+                            
+                            window.renderer.domElement.addEventListener('mousemove', function(event) {
+                                console.log("Canvas mousemove:", event.clientX, event.clientY);
+                            });
+                        } catch (error) {
+                            console.error("Failed to add mouse event listeners:", error);
+                        }
+                        
+                        // 创建并配置控制器
+                        console.log("Creating OrbitControls...");
+                        try {
+                            // 确保renderer存在且domElement可用
+                            if (window.renderer && window.renderer.domElement) {
+                                window.controls = new OrbitControls(window.camera, window.renderer.domElement);
+                                
+                                // 配置控制器
+                                window.controls.enableDamping = true;
+                                window.controls.dampingFactor = 0.05;
+                                window.controls.screenSpacePanning = true;
+                                window.controls.enableRotate = true;
+                                window.controls.enableZoom = true;
+                                window.controls.enablePan = true;
+                                window.controls.rotateSpeed = 1.0;
+                                window.controls.zoomSpeed = 1.0;
+                                window.controls.panSpeed = 0.8;
+                                window.controls.minDistance = 1;
+                                window.controls.maxDistance = 50;
+                                
+                                console.log("OrbitControls initialized:", window.controls);
+                                console.log("OrbitControls properties:", {
+                                    enableRotate: window.controls.enableRotate,
+                                    enableZoom: window.controls.enableZoom,
+                                    enablePan: window.controls.enablePan,
+                                    domElement: window.controls.domElement ? "Attached" : "Not attached"
+                                });
+                            } else {
+                                console.error("Cannot create OrbitControls - renderer or domElement unavailable");
+                            }
+                        } catch (error) {
+                            console.error("Failed to create OrbitControls:", error);
+                        }
+                        
+                        // 添加一个默认的几何体用于测试交互
+                        try {
+                            // 只在调试模式下添加测试对象
+                            const isDebugMode = false; // 设置为false禁用测试对象
+                            
+                            if (isDebugMode) {
+                                // 创建一个简单的蓝色立方体
+                                const geometry = new THREE.BoxGeometry(1, 1, 1);
+                                const material = new THREE.MeshStandardMaterial({ color: 0x3498db });
+                                const cube = new THREE.Mesh(geometry, material);
+                                
+                                // 添加立方体到场景
+                                window.scene.add(cube);
+                                window.model = cube; // 将立方体设为模型，以便测试交互
+                                
+                                // 在立方体周围添加一些小球，使场景更加丰富
+                                const smallGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+                                const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00];
+                                
+                                for (let i = 0; i < colors.length; i++) {
+                                    const smallMaterial = new THREE.MeshStandardMaterial({ color: colors[i] });
+                                    const sphere = new THREE.Mesh(smallGeometry, smallMaterial);
+                                    const angle = (i / colors.length) * Math.PI * 2;
+                                    sphere.position.set(Math.cos(angle) * 2, 0, Math.sin(angle) * 2);
+                                    window.scene.add(sphere);
+                                }
+                                
+                                // 添加坐标轴辅助（帮助查看方向）
+                                const axesHelper = new THREE.AxesHelper(5);
+                                window.scene.add(axesHelper);
+                                
+                                console.log("Test objects added to scene");
+                            } else {
+                                // 在非调试模式下创建简单的占位模型
+                                const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+                                const material = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0 });
+                                const invisibleCube = new THREE.Mesh(geometry, material);
+                                window.scene.add(invisibleCube);
+                                window.model = invisibleCube; // 设置为占位模型
+                                console.log("Creating invisible placeholder model");
+                            }
+                        } catch (error) {
+                            console.error("Failed to create test objects:", error);
+                        }
+                        
+                        // 设置默认控制模式
+                        if (window.controls) {
+                            setControlMode('rotate');
+                        } else {
+                            console.warn("Controls not initialized, cannot set control mode");
+                        }
+                        
+                        // 启动动画循环
+                        if (!window.animationRunning) {
+                            console.log("Starting animation loop");
+                            window.animationRunning = true;
+                            animate();
+                        }
+                        
+                        // 初始化完成后尝试加载实际模型
+                        setTimeout(function() {
+                            console.log("Attempting to load actual model");
+                            loadModelFromPath("direwolf.glb");
+                        }, 1000);
+                        
+                        // 监听窗口调整大小事件
+                        window.addEventListener('resize', onWindowResize);
+                        
+                        console.log("Three.js initialization completed successfully");
+                    } catch (error) {
+                        console.error("Error during Three.js initialization:", error);
+                        setLoadingStatus("初始化错误: " + error.message, "red");
+                        
+                        // 使用更友好的方式显示错误信息
+                        const container = document.getElementById('modelContainer');
+                        if (container) {
+                            while (container.firstChild) {
+                                container.removeChild(container.firstChild);
+                            }
+                            
+                            const errorDiv = document.createElement('div');
+                            errorDiv.className = 'absolute inset-0 flex items-center justify-center z-10';
+                            errorDiv.innerHTML = `
+                                <div class="loading-container">
+                                    <svg class="w-16 h-16 text-red-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <h3 class="text-xl font-bold text-red-600 mb-2">Unable to load 3D model</h3>
+                                    <p class="text-gray-700 mb-4">Sorry, the 3D model failed to load. Please try the following solutions:</p>
+                                    <ul class="text-left text-gray-700 mb-4 space-y-2">
+                                        <li>• Refresh the page</li>
+                                        <li>• Use a newer browser</li>
+                                        <li>• Check your internet connection</li>
+                                        <li>• Disable browser extensions and try again</li>
+                                    </ul>
+                                    <button id="retryBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">Try Again</button>
+                                </div>
+                            `;
+                            container.appendChild(errorDiv);
+                            
+                            // 添加重试按钮事件监听器
+                            const retryBtn = errorDiv.querySelector('#retryBtn');
+                            if (retryBtn) {
+                                retryBtn.addEventListener('click', () => {
+                                    // 清除当前错误显示
+                                    while (container.firstChild) {
+                                        container.removeChild(container.firstChild);
+                                    }
+                                    
+                                    // 显示加载中信息
+                                    const loadingText = document.createElement('div');
+                                    loadingText.id = 'loadingText';
+                                    loadingText.className = 'absolute inset-0 flex items-center justify-center z-10';
+                                    loadingText.innerHTML = `
+                                        <div class="loading-container">
+                                            <div class="loader"></div>
+                                            <p class="text-xl font-bold text-gray-800">Reloading 3D Model...</p>
+                                            <p class="text-gray-600 mt-2">Please wait, this may take a few seconds</p>
+                                        </div>
+                                    `;
+                                    container.appendChild(loadingText);
+                                    
+                                    // 尝试重新初始化
+                                    setTimeout(() => {
+                                        initializeThreeJS();
+                                    }, 500);
+                                });
+                            }
+                        }
+                        
+                        // 使用CSS备用显示作为最后手段
+                        if (!container) {
+                            createFallbackDisplay();
+                        }
+                    }
+                }
+
+                // 更新动画循环函数，增加错误处理和旋转测试对象
+                function animate() {
+                    try {
+                        // 请求下一帧
+                        requestAnimationFrame(animate);
+                        
+                        // 为测试对象添加简单的旋转动画（仅当模型是可见的测试立方体时）
+                        if (window.model && window.model.rotation && window.model.geometry instanceof THREE.BoxGeometry && 
+                            window.model.material && !window.model.material.transparent) {
+                            window.model.rotation.y += 0.01;
+                        } 
+                        // 为加载的实际模型添加轻微旋转
+                        else if (window.model && !(window.model.geometry instanceof THREE.BoxGeometry) && 
+                                 controlMode === 'rotate') {
+                            window.model.rotation.y += 0.005;
+                        }
+                        
+                        // 更新控制器（这一步很重要）
+                        if (window.controls) {
+                            window.controls.update();
+                        }
+                        
+                        // 渲染场景
+                        if (window.renderer && window.scene && window.camera) {
+                            window.renderer.render(window.scene, window.camera);
+                        } else {
+                            console.warn("Unable to render scene - missing required components");
+                        }
+                    } catch (error) {
+                        console.error("动画循环错误:", error);
+                        window.animationRunning = false;
+                    }
+                }
+                
+                // 简化的模型加载函数
+                function loadModelFromPath(modelPath) {
+                    try {
+                        console.log(`Loading model from path: ${modelPath}`);
+                        setLoadingStatus("");
+                        
+                        // 创建并显示加载进度UI
+                        const container = document.getElementById('modelContainer');
+                        if (container) {
+                            const loadingIndicator = document.createElement('div');
+                            loadingIndicator.id = 'loadingIndicator';
+                            loadingIndicator.className = 'absolute inset-0 flex items-center justify-center z-10';
+                            loadingIndicator.innerHTML = `
+                                <div class="loading-container">
+                                    <div class="loader"></div>
+                                    <p class="text-xl font-bold text-gray-800">Loading 3D Wolf Model...</p>
+                                    <p class="text-gray-600 mt-2">Model file: ${modelPath}</p>
+                                    <div class="progress-container mt-4 w-64">
+                                        <div id="modelLoadProgress" class="progress-bar" style="width: 0%">0%</div>
+                                    </div>
+                                </div>
+                            `;
+                            // 先移除可能存在的加载指示器
+                            const oldIndicator = document.getElementById('loadingIndicator');
+                            if (oldIndicator) {
+                                oldIndicator.remove();
+                            }
+                            container.appendChild(loadingIndicator);
+                        }
+                        
+                        const loader = new GLTFLoader();
+                        loader.load(
+                            modelPath,
+                            function(gltf) {
+                                console.log("Model loaded successfully:", gltf);
+                                
+                                // 移除加载指示器
+                                const loadingIndicator = document.getElementById('loadingIndicator');
+                                if (loadingIndicator) {
+                                    loadingIndicator.remove();
+                                }
+                                
+                                // 移除测试用立方体
+                                if (window.model) {
+                                    window.scene.remove(window.model);
+                                }
+                                
+                                // 移除场景中的所有辅助对象（坐标轴和小球）
+                                window.scene.children.forEach(object => {
+                                    // 移除坐标轴辅助
+                                    if (object instanceof THREE.AxesHelper) {
+                                        window.scene.remove(object);
+                                    }
+                                    // 移除小球（球体几何体）
+                                    if (object instanceof THREE.Mesh && 
+                                        object.geometry instanceof THREE.SphereGeometry) {
+                                        window.scene.remove(object);
+                                    }
+                                });
+                                
+                                window.model = gltf.scene;
+                                window.scene.add(window.model);
+                                
+                                // 调整模型大小和位置
+                                const box = new THREE.Box3().setFromObject(window.model);
+                                const size = box.getSize(new THREE.Vector3());
+                                const center = box.getCenter(new THREE.Vector3());
+                                
+                                const maxDim = Math.max(size.x, size.y, size.z);
+                                const scale = 5 / maxDim;
+                                window.model.scale.set(scale, scale, scale);
+                                
+                                window.model.position.x = -center.x * scale;
+                                window.model.position.y = -center.y * scale;
+                                window.model.position.z = -center.z * scale;
+                                
+                                // 更新相机以对准模型
+                                window.camera.position.copy(center);
+                                window.camera.position.x += size.x * scale * 2;
+                                window.camera.position.y += size.y * scale * 0.5;
+                                window.camera.position.z += size.z * scale * 2;
+                                window.camera.lookAt(center);
+                                
+                                // 通知用户加载完成 - 移除成功提示文字
+                                setLoadingStatus("", "green");
+                                
+                                console.log("Model positioned and scaled");
+                            },
+                            function(xhr) {
+                                const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                                console.log(`Loading progress: ${percent}%`);
+                                
+                                // 更新进度条
+                                const progressBar = document.getElementById('modelLoadProgress');
+                                if (progressBar) {
+                                    progressBar.style.width = `${percent}%`;
+                                    progressBar.textContent = `${percent}%`;
+                                }
+                            },
+                            function(error) {
+                                console.error("Error loading model:", error);
+                                
+                                // 显示友好的错误提示
+                                const container = document.getElementById('modelContainer');
+                                if (container) {
+                                    // 移除加载指示器
+                                    const loadingIndicator = document.getElementById('loadingIndicator');
+                                    if (loadingIndicator) {
+                                        loadingIndicator.remove();
+                                    }
+                                    
+                                    // 创建错误信息展示
+                                    const errorDiv = document.createElement('div');
+                                    errorDiv.className = 'absolute bottom-20 left-0 right-0 mx-auto w-4/5 max-w-lg z-10';
+                                    errorDiv.innerHTML = `
+                                        <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-lg">
+                                            <div class="flex items-center">
+                                                <svg class="w-6 h-6 text-red-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                                <h3 class="text-red-800 font-bold">Model Loading Failed</h3>
+                                            </div>
+                                            <p class="text-red-700 mt-2">${error.message || 'Please check your internet connection or model file'}</p>
+                                            <button id="closeErrorBtn" class="mt-2 bg-red-100 text-red-800 px-3 py-1 rounded text-sm hover:bg-red-200">Close</button>
+                                            <button id="retryModelBtn" class="mt-2 ml-2 bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">Retry</button>
+                                        </div>
+                                    `;
+                                    container.appendChild(errorDiv);
+                                    
+                                    // 添加关闭按钮事件
+                                    const closeBtn = errorDiv.querySelector('#closeErrorBtn');
+                                    if (closeBtn) {
+                                        closeBtn.addEventListener('click', () => {
+                                            errorDiv.remove();
+                                        });
+                                    }
+                                    
+                                    // 添加重试按钮事件
+                                    const retryBtn = errorDiv.querySelector('#retryModelBtn');
+                                    if (retryBtn) {
+                                        retryBtn.addEventListener('click', () => {
+                                            errorDiv.remove();
+                                            loadModelFromPath(modelPath);
+                                        });
+                                    }
+                                } else {
+                                    setLoadingStatus(`Error loading model: ${error.message}`, "red");
+                                }
+                            }
+                        );
+                    } catch (error) {
+                        console.error("Error in loadModelFromPath:", error);
+                    }
+                }
+                
+                // 窗口大小调整函数
+                function onWindowResize() {
+                    try {
+                        const container = document.getElementById('modelContainer');
+                        const width = container.clientWidth;
+                        const height = container.clientHeight;
+                        
+                        if (window.camera) {
+                            window.camera.aspect = width / height;
+                            window.camera.updateProjectionMatrix();
+                        }
+                        
+                        if (window.renderer) {
+                            window.renderer.setSize(width, height);
+                        }
+                        
+                        console.log("Window resized, new dimensions:", width, height);
+                    } catch (error) {
+                        console.error("Error during window resize:", error);
+                    }
+                }
+
+                // 控制模式设置函数
+                function setControlMode(mode) {
+                    console.log(`Setting control mode to: ${mode}`);
+                    controlMode = mode;
+                    
+                    if (!window.controls) {
+                        console.warn("Controls not initialized, can't set mode");
+                        return;
+                    }
+                    
+                    // 根据模式设置控制器
+                    switch(mode) {
+                        case 'rotate':
+                            window.controls.enableRotate = true;
+                            window.controls.enableZoom = false;
+                            window.controls.enablePan = false;
+                            break;
+                        case 'zoom':
+                            window.controls.enableRotate = false;
+                            window.controls.enableZoom = true;
+                            window.controls.enablePan = false;
+                            break;
+                        case 'pan':
+                            window.controls.enableRotate = false;
+                            window.controls.enableZoom = false;
+                            window.controls.enablePan = true;
+                            break;
+                        case 'reset':
+                            // Reset camera and controls
+                            resetCameraAndControls();
+                            // Reset after default to rotation mode
+                            setTimeout(() => {
+                                setControlMode('rotate');
+                                return;
+                            }, 100);
+                            break;
+                    }
+                    
+                    // 更新按钮样式
+                    document.querySelectorAll('.model-controls button').forEach(btn => {
+                        btn.classList.remove('bg-blue-600', 'text-white');
+                        btn.classList.add('bg-white', 'text-gray-800');
+                    });
+                    
+                    const modeBtn = document.getElementById(mode + 'Btn');
+                    if (modeBtn && mode !== 'reset') {
+                        modeBtn.classList.remove('bg-white', 'text-gray-800');
+                        modeBtn.classList.add('bg-blue-600', 'text-white');
+                    }
+                    
+                    // Force update controller
+                    window.controls.update();
+                    console.log("Control mode updated:", {
+                        enableRotate: window.controls.enableRotate,
+                        enableZoom: window.controls.enableZoom,
+                        enablePan: window.controls.enablePan
+                    });
+                }
+                
+                // Reset camera and controls function
+                function resetCameraAndControls() {
+                    console.log("Resetting camera and controls");
+                    
+                    // If no model exists, use default position
+                    if (!window.model) {
+                        window.camera.position.set(0, 0, 10);
+                        window.camera.lookAt(0, 0, 0);
+                        window.controls.target.set(0, 0, 0);
+                    } else {
+                        // If model exists, reposition camera to fit the model
+                        const box = new THREE.Box3().setFromObject(window.model);
+                        const size = box.getSize(new THREE.Vector3());
+                        const center = box.getCenter(new THREE.Vector3());
+                        
+                        // Adjust camera position to view model completely
+                        const maxDim = Math.max(size.x, size.y, size.z);
+                        window.camera.position.copy(center);
+                        window.camera.position.x += maxDim * 2;
+                        window.camera.position.y += maxDim * 0.5;
+                        window.camera.position.z += maxDim * 2;
+                        window.camera.lookAt(center);
+                        
+                        // Reset controller target point
+                        window.controls.target.copy(center);
+                    }
+                    
+                    // Reset controller state
+                    window.controls.update();
+                    
+                    console.log("Camera and controls have been reset");
+                }
+                
+                // 更新调试面板
+                function updateDebugPanel() {
+                    const logElement = document.getElementById('debugLog');
+                    if (logElement) {
+                        logElement.innerHTML = debugLog.map(entry => {
+                            const color = entry.type === 'error' ? 'text-red-500' : 
+                                          entry.type === 'warn' ? 'text-yellow-500' : 'text-gray-700';
+                            return `<div class="${color}">[${entry.time.split('T')[1].split('.')[0]}] ${entry.message}</div>`;
+                        }).join('\n');
+                        
+                        logElement.scrollTop = logElement.scrollHeight;
+                    }
+                }
+
+                // 重写console方法以记录到调试面板
                 const originalConsoleLog = console.log;
                 const originalConsoleError = console.error;
                 const originalConsoleWarn = console.warn;
                 
-                // Override console methods to capture logs
                 console.log = function() {
                     debugLog.push({type: 'log', message: Array.from(arguments).join(' '), time: new Date().toISOString()});
                     updateDebugPanel();
@@ -261,1076 +1124,268 @@
                     originalConsoleWarn.apply(console, arguments);
                 };
                 
-                // Update debug panel with logs
-                function updateDebugPanel() {
-                    const logElement = document.getElementById('debugLog');
-                    if (logElement) {
-                        logElement.innerHTML = debugLog.map(entry => {
-                            const color = entry.type === 'error' ? 'text-red-500' : 
-                                         entry.type === 'warn' ? 'text-yellow-500' : 'text-gray-700';
-                            return `<div class="${color}">[${entry.time.split('T')[1].split('.')[0]}] ${entry.message}</div>`;
-                        }).join('\n');
-                        
-                        // Auto-scroll to bottom
-                        logElement.scrollTop = logElement.scrollHeight;
+                // 按钮事件处理
+                document.addEventListener('DOMContentLoaded', function() {
+                    console.log("DOM Content Loaded - Setting up button handlers");
+                    
+                    // 显示调试面板
+                    const debugPanel = document.getElementById('debugPanel');
+                    if (debugPanel) {
+                        debugPanel.classList.remove('hidden');
                     }
-                }
-                
-                // Add debug panel event listeners after DOM loads
-                document.addEventListener('DOMContentLoaded', () => {
-                    // Toggle debug panel
-                    document.getElementById('toggleDebugBtn').addEventListener('click', () => {
-                        const debugPanel = document.getElementById('debugPanel');
-                        debugPanel.classList.toggle('hidden');
-                    });
                     
-                    // Clear debug log
-                    document.getElementById('clearLogBtn').addEventListener('click', () => {
-                        debugLog = [];
-                        updateDebugPanel();
-                    });
+                    // 控制模式按钮
+                    const rotateBtn = document.getElementById('rotateBtn');
+                    const zoomBtn = document.getElementById('zoomBtn');
+                    const panBtn = document.getElementById('panBtn');
+                    const resetBtn = document.getElementById('resetBtn');
                     
-                    // Test paths button
-                    document.getElementById('testPathsBtn').addEventListener('click', async () => {
-                        console.log('Running manual path tests...');
-                        const pathsToTest = [
-                            'direwolf.glb',
-                            './direwolf.glb',
-                            '/direwolf.glb',
-                            '../direwolf.glb',
-                            'models/direwolf.glb',
-                            './models/direwolf.glb',
-                            '/models/direwolf.glb',
-                            window.location.href.replace(/[^/]*$/, '') + 'direwolf.glb',
-                            window.location.href.replace(/[^/]*$/, '') + 'models/direwolf.glb'
-                        ];
-                        
-                        const container = document.getElementById('pathTestsContainer');
-                        container.innerHTML = '';
-                        
-                        for (const path of pathsToTest) {
-                            const div = document.createElement('div');
-                            div.className = 'bg-gray-200 p-2 rounded flex justify-between';
-                            div.innerHTML = `
-                                <span class="truncate" title="${path}">${path}</span>
-                                <span class="loading">Testing...</span>
-                            `;
-                            container.appendChild(div);
-                            
-                            try {
-                                const response = await fetch(path, { method: 'HEAD' });
-                                div.className = response.ok ? 
-                                    'bg-green-100 p-2 rounded flex justify-between' : 
-                                    'bg-red-100 p-2 rounded flex justify-between';
-                                div.querySelector('.loading').textContent = response.ok ? 
-                                    'Found ✓' : `Not found (${response.status})`;
-                            } catch (error) {
-                                div.className = 'bg-red-100 p-2 rounded flex justify-between';
-                                div.querySelector('.loading').textContent = `Error: ${error.message}`;
-                            }
-                        }
-                    });
+                    if (rotateBtn) rotateBtn.addEventListener('click', () => setControlMode('rotate'));
+                    if (zoomBtn) zoomBtn.addEventListener('click', () => setControlMode('zoom'));
+                    if (panBtn) panBtn.addEventListener('click', () => setControlMode('pan'));
+                    if (resetBtn) resetBtn.addEventListener('click', () => setControlMode('reset'));
                     
-                    // Try loading model manually
-                    document.getElementById('tryModelBtn').addEventListener('click', () => {
-                        console.log('手动加载模型');
-                        const useSimplifiedModel = confirm('是否要加载内置的简化模型？\n点击"确定"加载简化模型，点击"取消"输入自定义路径。');
-                        
-                        if (useSimplifiedModel) {
-                            // 直接创建并显示简化模型
-                            showFallbackModel({
-                                body: 0x8B4513,   // 棕色
-                                head: 0x6B4226,   // 深棕色
-                                legs: 0x8B4513,   // 棕色
-                                tail: 0x8B4513    // 棕色
-                            });
-                        } else {
-                            // 提示用户输入路径
-                            const path = prompt('请输入模型路径:', 'models/direwolf.glb');
-                            if (path) {
-                                console.log(`手动尝试从路径加载模型: ${path}`);
-                                // 如果已有模型则移除
-                                if (model && scene) {
-                                    scene.remove(model);
-                                }
-                                
-                                // 直接加载模型，不检查文件是否存在
-                                loadModelWithGLTF(path, 0, [path]);
-                            }
-                        }
-                    });
-                });
-                
-                // Add file existence check (for debugging)
-                async function checkFileExists(url) {
-                    console.log(`检查文件是否存在: ${url}`);
-                    try {
-                        const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-                        const exists = response.ok;
-                        console.log(`文件 ${url} ${exists ? '存在' : '不存在'} (状态码: ${response.status})`);
-                        return exists;
-                    } catch (error) {
-                        console.warn(`检查文件存在出错: ${url}`, error.message);
-                        // 如果报错，尝试使用GET方法请求一小部分文件
-                        try {
-                            const response = await fetch(url, { 
-                                method: 'GET', 
-                                headers: { 'Range': 'bytes=0-1024' },
-                                cache: 'no-store'
-                            });
-                            const exists = response.ok;
-                            console.log(`文件 ${url} ${exists ? '存在(GET)' : '不存在(GET)'} (状态码: ${response.status})`);
-                            return exists;
-                        } catch (e) {
-                            console.error(`第二次检查文件存在出错: ${url}`, e.message);
-                            return false;
-                        }
-                    }
-                }
-                
-                // 重写tryLoadingFromMultiplePaths函数
-                async function tryLoadingFromMultiplePaths(paths, currentIndex = 0) {
-                    if (currentIndex >= paths.length) {
-                        console.error('All paths failed to load:', paths);
-                        loadingStatus.textContent = 'Failed to load model. Check debug panel for details.';
-                        loadingStatus.style.color = 'red';
-                        
-                        // All paths failed, use simplified model
-                        showFallbackModel();
-                        return;
-                    }
-
-                    const path = paths[currentIndex];
-                    console.log(`Attempting to load model from path: ${path} (${currentIndex + 1}/${paths.length})`);
-                    
-                    // Directly try to load the model without checking file existence
-                    // This avoids CORS issues with local file system
-                    loadModelWithGLTF(path, currentIndex, paths);
-                }
-
-                // Load model with error handling
-                function loadModelWithGLTF(modelPath, currentPathIndex, allPaths) {
-                    console.log(`Loading model: ${modelPath}`);
-                    
-                    // Set a loading timeout (15 seconds)
-                    const loadingTimeout = setTimeout(() => {
-                        console.error(`Model loading timeout: ${modelPath}`);
-                        tryLoadingFromMultiplePaths(allPaths, currentPathIndex + 1);
-                    }, 15000);
-                    
-                    const progressContainer = document.getElementById('progressContainer');
-                    const progressBar = document.getElementById('progressBar');
-                    progressContainer.classList.remove('hidden');
-                    progressBar.style.width = '0%';
-                    progressBar.textContent = '0%';
-                    
-                    // Progress tracking
-                    const onProgress = (event) => {
-                        if (event.lengthComputable) {
-                            const percentComplete = Math.round((event.loaded / event.total) * 100);
-                            progressBar.style.width = `${percentComplete}%`;
-                            progressBar.textContent = `${percentComplete}%`;
-                            console.log(`Loading progress: ${percentComplete}%`);
-                        }
-                    };
-
-                    try {
-                        // Create GLTFLoader instance
-                        const loader = new ThreeGLTFLoader();
-                        
-                        loader.load(
-                            modelPath,
-                            (gltf) => {
-                                clearTimeout(loadingTimeout);
-                                console.log('Model loaded successfully!');
-                                
-                                // Hide progress
-                                progressContainer.classList.add('hidden');
-                                loadingStatus.textContent = 'Model loaded successfully!';
-                                loadingStatus.style.color = 'green';
-                                
-                                // Clear previous model
-                                if (model && scene) {
-                                    scene.remove(model);
-                                }
-                                
-                                model = gltf.scene;
-                                scene.add(model);
-                                
-                                // Display model information
-                                const modelInfo = document.getElementById('modelInfo');
-                                const modelStatus = document.getElementById('modelStatus');
-                                const modelTriangles = document.getElementById('modelTriangles');
-                                const modelVertices = document.getElementById('modelVertices');
-                                const modelMaterials = document.getElementById('modelMaterials');
-                                
-                                modelInfo.classList.remove('hidden');
-                                modelStatus.textContent = 'Loaded successfully';
-                                modelStatus.style.color = 'green';
-                                
-                                // Count triangles, vertices, and materials
-                                let triangleCount = 0;
-                                let vertexCount = 0;
-                                let materialCount = 0;
-                                const materials = new Set();
-                                
-                                model.traverse((child) => {
-                                    if (child.isMesh) {
-                                        if (child.geometry) {
-                                            if (child.geometry.index) {
-                                                triangleCount += child.geometry.index.count / 3;
-                                            } else if (child.geometry.attributes.position) {
-                                                triangleCount += child.geometry.attributes.position.count / 3;
-                                            }
-                                            
-                                            if (child.geometry.attributes.position) {
-                                                vertexCount += child.geometry.attributes.position.count;
-                                            }
-                                        }
-                                        
-                                        if (child.material) {
-                                            if (Array.isArray(child.material)) {
-                                                child.material.forEach(mat => materials.add(mat));
-                                            } else {
-                                                materials.add(child.material);
-                                            }
-                                        }
-                                    }
-                                });
-                                
-                                materialCount = materials.size;
-                                
-                                modelTriangles.textContent = triangleCount.toLocaleString();
-                                modelVertices.textContent = vertexCount.toLocaleString();
-                                modelMaterials.textContent = materialCount;
-                                
-                                // Center model
-                                const box = new THREE.Box3().setFromObject(model);
-                                const center = box.getCenter(new THREE.Vector3());
-                                const size = box.getSize(new THREE.Vector3());
-                                
-                                // Calculate scale to normalize model size
-                                const maxDim = Math.max(size.x, size.y, size.z);
-                                const scale = 5 / maxDim;
-                                model.scale.set(scale, scale, scale);
-                                
-                                // Reset position to center
-                                model.position.x = -center.x * scale;
-                                model.position.y = -center.y * scale;
-                                model.position.z = -center.z * scale;
-                                
-                                // Initialize annotations
-                                initializeAnnotations(model);
-                                
-                                // Update camera 
-                                updateCamera();
-                                
-                                // 确保控制器正确配置
-                                if (controls) {
-                                    console.log('重新配置控制器');
-                                    
-                                    // 允许旋转和缩放
-                                    controls.enableRotate = true;
-                                    controls.enableZoom = true;
-                                    controls.enablePan = false;
-                                    
-                                    // 设置控制器阻尼，使运动更平滑
-                                    controls.enableDamping = true;
-                                    controls.dampingFactor = 0.05;
-                                    
-                                    // 更新控制器目标
-                                    controls.target.copy(new THREE.Vector3(0, 0, 0));
-                                    controls.update();
-                                    
-                                    // 设置默认控制模式
-                                    setControlMode('rotate');
-                                }
-                                
-                                // Start animation if not already running
-                                if (!window.animationFrameId) {
-                                    animate();
-                                }
-                                
-                                // 几秒后隐藏提示
-                                setTimeout(function() {
-                                    loadingStatus.textContent = '';
-                                }, 3000);
-                            },
-                            onProgress,
-                            (error) => {
-                                clearTimeout(loadingTimeout);
-                                console.error(`Model loading error ${modelPath}:`, error.message);
-                                progressContainer.classList.add('hidden');
-                                
-                                // Try next path
-                                tryLoadingFromMultiplePaths(allPaths, currentPathIndex + 1);
-                            }
-                        );
-                    } catch (error) {
-                        clearTimeout(loadingTimeout);
-                        console.error(`Error creating or loading GLTFLoader: ${modelPath}`, error);
-                        progressContainer.classList.add('hidden');
-                        
-                        // Try next path
-                        tryLoadingFromMultiplePaths(allPaths, currentPathIndex + 1);
-                    }
-                }
-
-                // Initialize scene and attempt to load model
-                function init() {
-                    console.log('Initializing 3D scene...');
-                    
-                    // Ensure debug panel is shown by default
-                    document.getElementById('debugPanel').classList.remove('hidden');
-                    
-                    // Determine base URL
-                    const baseUrl = window.location.href.replace(/[^/]*$/, '');
-                    
-                    // Create list of paths to try (in priority order)
-                    const modelPaths = [
-                        './models/direwolf.glb',        // First try relative path to models directory
-                        'models/direwolf.glb',          // Then try models directory
-                        './direwolf.glb',               // Try root directory (relative path)
-                        'direwolf.glb',                 // Try root directory
-                        '../models/direwolf.glb',       // Try parent directory's models
-                        '../direwolf.glb',              // Try parent directory
-                        baseUrl + 'models/direwolf.glb',// Try absolute path to models
-                        baseUrl + 'direwolf.glb',       // Try absolute path to root directory
-                        '/models/direwolf.glb',         // Try server root directory
-                        '/direwolf.glb'                 // Try server root directory
-                    ];
-                    
-                    console.log('Model paths to try:', modelPaths);
-                    
-                    // Set scene, camera, renderer
-                    scene = new THREE.Scene();
-                    scene.background = new THREE.Color(0xf0f0f0);
-                    
-                    // Prefer container size over window size
-                    const container = document.getElementById('modelContainer');
-                    const containerWidth = container.clientWidth;
-                    const containerHeight = container.clientHeight;
-                    
-                    camera = new THREE.PerspectiveCamera(45, containerWidth / containerHeight, 0.1, 1000);
-                    camera.position.set(0, 0, 10);
-                    
-                    // Add ambient light
-                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-                    scene.add(ambientLight);
-                    
-                    // Add directional light
-                    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                    directionalLight.position.set(1, 1, 1);
-                    scene.add(directionalLight);
-                    
-                    try {
-                        // Create renderer
-                        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-                        renderer.setSize(containerWidth, containerHeight);
-                        renderer.setPixelRatio(window.devicePixelRatio);
-                        
-                        // Clear previous renderer
-                        const existingCanvas = container.querySelector('canvas');
-                        if (existingCanvas) {
-                            container.removeChild(existingCanvas);
-                        }
-                        
-                        container.appendChild(renderer.domElement);
-                        
-                        // Ensure canvas fills container
-                        renderer.domElement.style.width = '100%';
-                        renderer.domElement.style.height = '100%';
-                        
-                        // Controller
-                        console.log('Initializing controller...');
-                        controls = new ThreeOrbitControls(camera, renderer.domElement);
-                        
-                        // Basic configuration
-                        controls.enableDamping = true;
-                        controls.dampingFactor = 0.05;
-                        controls.screenSpacePanning = true; // More intuitive panning
-                        
-                        // Allow rotation and zooming
-                        controls.enableRotate = true;
-                        controls.enableZoom = true;
-                        controls.enablePan = false;
-                        
-                        // Configure controller other parameters
-                        controls.minDistance = 1; // Minimum zoom distance
-                        controls.maxDistance = 50; // Maximum zoom distance
-                        controls.rotateSpeed = 1.0; // Rotation speed
-                        controls.zoomSpeed = 1.0; // Zoom speed
-                        controls.autoRotate = false; // Disable auto rotation
-                        
-                        console.log('Controller initialized, status:', {
-                            enableRotate: controls.enableRotate,
-                            enableZoom: controls.enableZoom,
-                            enablePan: controls.enablePan,
-                            domElement: controls.domElement ? 'Connected' : 'Not connected'
-                        });
-                        
-                        // Set default mode - Allow rotation and zooming
-                        setControlMode('rotate');
-                        
-                        // Start animation loop
-                        animate();
-                    } catch (error) {
-                        console.error('Failed to create renderer:', error);
-                        loadingStatus.innerHTML = `
-                            <div class="loading-container">
-                                <p class="text-red-600 font-bold">WebGL Error</p>
-                                <p class="text-gray-800">${error.message}</p>
-                                <p class="text-gray-600 mt-2">Your browser may not support WebGL.</p>
-                            </div>
-                        `;
-                        return;
-                    }
-
-                    // Directly load local model
-                    tryLoadingFromMultiplePaths(modelPaths);
-                    
-                    // Handle window resize
-                    window.addEventListener('resize', onWindowResize);
-                    
-                    // Load standard model button
+                    // 加载模型按钮
                     const loadStandardBtn = document.getElementById('loadStandardModel');
                     if (loadStandardBtn) {
                         loadStandardBtn.addEventListener('click', () => {
-                            console.log('Loading standard model');
-                            loadingStatus.textContent = 'Loading standard model...';
-                            
-                            // Get current page's full path
-                            const currentPath = window.location.pathname;
-                            const basePath = currentPath.substring(0, currentPath.lastIndexOf('/') + 1);
-                            
-                            // Use absolute paths
-                            const modelPathsToTry = [
-                                basePath + 'models/direwolf.glb',
-                                basePath + 'direwolf.glb',
-                                './models/direwolf.glb',
-                                'models/direwolf.glb'
-                            ];
-                            
-                            // Remove existing model if there is one
-                            if (model && scene) {
-                                scene.remove(model);
-                            }
-                            
-                            tryLoadingFromMultiplePaths(modelPathsToTry);
+                            console.log("Loading standard model");
+                            loadModelFromPath("direwolf.glb");
                         });
-                        console.log('Standard model button event listener added');
-                    } else {
-                        console.error('Standard model button element not found');
                     }
                     
-                    // Handle SkeletonModel
+                    // 骨架模型按钮
                     const loadSkeletonBtn = document.getElementById('loadSkeletonModel');
                     if (loadSkeletonBtn) {
                         loadSkeletonBtn.addEventListener('click', () => {
-                            console.log('loadSkeletonModel');
-                            loadingStatus.textContent = 'Skeleton Model is loading...';
-                            
-                            // 获取当前页面的完整路径
-                            const currentPath = window.location.pathname;
-                            const basePath = currentPath.substring(0, currentPath.lastIndexOf('/') + 1);
-                            
-                            // 使用绝对路径
-                            const modelPathsToTry = [
-                                basePath + 'models/direwolf-skeleton.glb',
-                                basePath + 'direwolf-skeleton.glb',
-                                './models/direwolf-skeleton.glb',
-                                'models/direwolf-skeleton.glb'
-                            ];
-                            
-                            // 如果已有模型则移除
-                            if (model && scene) {
-                                scene.remove(model);
-                            }
-                            
-                            tryLoadingFromMultiplePaths(modelPathsToTry);
+                            console.log("Loading skeleton model");
+                            loadModelFromPath("direwolf-skeleton.glb");
                         });
-                        console.log('Skeleton Model button event listener added');
-                    } else {
-                        console.error('Skeleton Model button element not found');
-                    }                    
-                    // Handle file upload
-                    const uploadBtn = document.getElementById('uploadModelBtn');
-                    if (uploadBtn) {
-                        uploadBtn.addEventListener('click', handleModelUpload);
-                        console.log('Upload model button event listener added');
-                    } else {
-                        console.error('Upload model button element not found');
                     }
-                }
-                
-                // Modify animation loop function
-                function animate() {
-                    try {
-                        window.animationFrameId = requestAnimationFrame(animate);
-                        if (controls) {
-                            controls.update();
-                            
-                            // Add log to confirm controller status
-                            if (window.debugControlsOnce) {
-                                console.log('Controller status:', {
-                                    enableRotate: controls.enableRotate,
-                                    enableZoom: controls.enableZoom,
-                                    enablePan: controls.enablePan,
-                                    dampingFactor: controls.dampingFactor
-                                });
-                                window.debugControlsOnce = false;
-                            }
-                        }
-                        if (renderer && scene && camera) {
-                            renderer.render(scene, camera);
-                        }
-                    } catch (error) {
-                        console.error('Animation loop error:', error);
-                        cancelAnimationFrame(window.animationFrameId);
-                    }
-                }
-
-                // Add debugging feature: Check THREE.js version and WebGL information
-                function checkWebGLCapabilities() {
-                    try {
-                        const canvas = document.createElement('canvas');
-                        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-                        
-                        if (!gl) {
-                            return {
-                                supported: false,
-                                error: 'WebGL not supported'
-                            };
-                        }
-                        
-                        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-                        return {
-                            supported: true,
-                            vendor: debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
-                            renderer: debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
-                            version: gl.getParameter(gl.VERSION),
-                            shadingLanguage: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
-                            extensions: gl.getSupportedExtensions()
-                        };
-                    } catch (error) {
-                        return {
-                            supported: false,
-                            error: error.message
-                        };
-                    }
-                }
-
-                // Add diagnostic tool button event handling
-                document.addEventListener('DOMContentLoaded', () => {
-                    // Get WebGL information
-                    const webglInfo = checkWebGLCapabilities();
-                    console.log('WebGL information:', webglInfo);
                     
-                    // Add WebGL information to debug panel
-                    const debugLog = document.getElementById('debugLog');
-                    if (debugLog) {
-                        debugLog.innerHTML += '\n---- WebGL Information ----\n';
-                        if (webglInfo.supported) {
-                            debugLog.innerHTML += `Support status: Supported\n`;
-                            debugLog.innerHTML += `Vendor: ${webglInfo.vendor}\n`;
-                            debugLog.innerHTML += `Renderer: ${webglInfo.renderer}\n`;
-                            debugLog.innerHTML += `Version: ${webglInfo.version}\n`;
-                            debugLog.innerHTML += `Shading language: ${webglInfo.shadingLanguage}\n`;
+                    // 调试按钮
+                    const toggleDebugBtn = document.getElementById('toggleDebugBtn');
+                    if (toggleDebugBtn) {
+                        toggleDebugBtn.addEventListener('click', () => {
+                            const panel = document.getElementById('debugPanel');
+                            if (panel) panel.classList.toggle('hidden');
+                        });
+                    }
+                    
+                    // 测试交互按钮
+                    const testInteractionBtn = document.getElementById('testInteractionBtn');
+                    if (testInteractionBtn) {
+                        console.log("找到测试交互按钮，添加事件监听器");
+                        // 这个事件监听器会在按钮点击时再次添加，确保按钮功能正常
+                        testInteractionBtn.addEventListener('click', function() {
+                            console.log("测试交互按钮被点击 - DOMContentLoaded事件处理程序");
+                            const statusDiv = document.getElementById('interactionStatus');
+                            if (statusDiv) {
+                                statusDiv.innerHTML = '<p class="text-green-600">Processing, please wait...</p>';
+                                // 调用已定义的处理函数会在上面的事件监听器中被处理
+                            }
+                        });
+                    } else {
+                        console.error("找不到测试交互按钮");
+                    }
+                    
+                    console.log("Button handlers set up");
+                });
+
+                // JavaScript 添加测试交互功能
+                document.getElementById('testInteractionBtn').addEventListener('click', function() {
+                    const statusDiv = document.getElementById('interactionStatus');
+                    statusDiv.innerHTML = '<p class="text-blue-600 font-bold">Please now move the mouse and click in the 3D model area...</p>';
+                    
+                    // 创建一个简单的交互测试立方体
+                    try {
+                        // 检查THREE对象是否可用
+                        if (!window.THREE) {
+                            statusDiv.innerHTML += '<p class="text-red-600">THREE object not available! Page may not have loaded Three.js library correctly</p>';
+                            
+                            // 尝试导入THREE
+                            try {
+                                const script = document.createElement('script');
+                                script.src = 'https://cdn.jsdelivr.net/npm/three@0.139.2/build/three.min.js';
+                                script.async = true;
+                                script.onload = function() {
+                                    statusDiv.innerHTML += '<p class="text-green-600">Three.js library loaded, please click the test button again</p>';
+                                    window.THREE = window.THREE || THREE;
+                                };
+                                script.onerror = function() {
+                                    statusDiv.innerHTML += '<p class="text-red-600">Failed to load Three.js library, please refresh the page and try again</p>';
+                                };
+                                document.head.appendChild(script);
+                            } catch(e) {
+                                statusDiv.innerHTML += `<p class="text-red-600">Error loading Three.js library: ${e.message}</p>`;
+                            }
+                            return;
+                        }
+                        
+                        if (window.scene && window.camera && window.renderer) {
+                            // 移除现有模型
+                            if (window.model) {
+                                window.scene.remove(window.model);
+                            }
+                            
+                            // 显示THREE的状态
+                            console.log("THREE status:", window.THREE ? "Available" : "Not available");
+                            
+                            // 创建一个彩色的立方体阵列
+                            const group = new window.THREE.Group();
+                            const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff];
+                            
+                            for (let i = 0; i < colors.length; i++) {
+                                const geometry = new window.THREE.BoxGeometry(0.5, 0.5, 0.5);
+                                const material = new window.THREE.MeshStandardMaterial({ color: colors[i] });
+                                const cube = new window.THREE.Mesh(geometry, material);
+                                cube.position.set(Math.cos(i/3 * Math.PI), 0, Math.sin(i/3 * Math.PI));
+                                group.add(cube);
+                            }
+                            
+                            window.scene.add(group);
+                            window.model = group;
+                            
+                            // 更新相机位置
+                            window.camera.position.set(0, 2, 3);
+                            window.camera.lookAt(0, 0, 0);
+                            
+                            statusDiv.innerHTML += '<p class="text-green-600">Test cube created, you should see a colorful cube array</p>';
+                            
+                            // 创建一个单独的动画函数，避免干扰主动画循环
+                            let testAnimationId = null;
+                            const animateTest = function() {
+                                testAnimationId = requestAnimationFrame(animateTest);
+                                if (window.model && window.model === group) {
+                                    group.rotation.y += 0.01;
+                                } else {
+                                    // 如果模型被替换，停止测试动画
+                                    cancelAnimationFrame(testAnimationId);
+                                    return;
+                                }
+                                
+                                if (window.renderer && window.scene && window.camera) {
+                                    window.renderer.render(window.scene, window.camera);
+                                } else {
+                                    // 如果渲染器、场景或相机丢失，停止测试动画
+                                    cancelAnimationFrame(testAnimationId);
+                                }
+                            };
+                            
+                            // 启动测试动画
+                            animateTest();
+                            
+                            // 添加额外的调试信息
+                            const containerEl = document.getElementById('modelContainer');
+                            if (containerEl) {
+                                statusDiv.innerHTML += `<p class="text-gray-600">Container size: ${containerEl.clientWidth}x${containerEl.clientHeight}</p>`;
+                            }
+                            if (window.renderer) {
+                                statusDiv.innerHTML += `<p class="text-gray-600">Renderer size: ${window.renderer.getSize(new window.THREE.Vector2()).width}x${window.renderer.getSize(new window.THREE.Vector2()).height}</p>`;
+                            }
+                            statusDiv.innerHTML += '<p class="text-blue-600">Please try dragging and rotating the cube</p>';
+                            
                         } else {
-                            debugLog.innerHTML += `Support status: Not supported\n`;
-                            debugLog.innerHTML += `Error: ${webglInfo.error}\n`;
+                            // 更详细的错误信息
+                            let errorMsg = "3D environment not initialized correctly! ";
+                            if (!window.scene) errorMsg += "scene not created; ";
+                            if (!window.camera) errorMsg += "camera not created; ";
+                            if (!window.renderer) errorMsg += "renderer not created; ";
+                            
+                            statusDiv.innerHTML += `<p class="text-red-600">${errorMsg}</p>`;
+                            statusDiv.innerHTML += '<p class="text-red-600">Please try refreshing the page, or clicking the "Load Standard Model" button below</p>';
+                            
+                            // 尝试手动初始化
+                            statusDiv.innerHTML += '<p class="text-blue-600">Attempting manual initialization...</p>';
+                            setTimeout(function() {
+                                try {
+                                    if (typeof initializeThreeJS === 'function') {
+                                        // 先确保容器存在
+                                        ensureModelContainerExists();
+                                        // 然后初始化
+                                        initializeThreeJS();
+                                        statusDiv.innerHTML += '<p class="text-green-600">Manual initialization completed, please click "Test Interaction" button again</p>';
+                                    } else {
+                                        statusDiv.innerHTML += '<p class="text-red-600">Cannot find initialization function</p>';
+                                    }
+                                } catch (e) {
+                                    statusDiv.innerHTML += `<p class="text-red-600">Manual initialization failed: ${e.message}</p>`;
+                                }
+                            }, 1000);
+                        }
+                    } catch (error) {
+                        statusDiv.innerHTML += `<p class="text-red-600">Error creating test cube: ${error.message}</p>`;
+                        console.error("Test cube creation error:", error);
+                        
+                        // 尝试显示更多的错误信息
+                        if (error.stack) {
+                            console.error("Error stack:", error.stack);
+                        }
+                        
+                        // 检查浏览器是否支持WebGL
+                        try {
+                            const canvas = document.createElement('canvas');
+                            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                            if (!gl) {
+                                statusDiv.innerHTML += '<p class="text-red-600 font-bold">Your browser does not support WebGL, cannot display 3D content</p>';
+                            }
+                        } catch (e) {
+                            statusDiv.innerHTML += '<p class="text-red-600 font-bold">Error checking WebGL support</p>';
                         }
                     }
                 });
-                
-                // Ensure correct execution of resetControls function
-                function resetControls() {
-                    console.log('Reset view');
-                    
-                    if (!model || !scene || !camera || !controls) {
-                        console.warn('Unable to reset - Model or scene not initialized');
-                        return;
-                    }
-                    
+
+                function loadModel(modelUrl) {
                     try {
-                        const box = new THREE.Box3().setFromObject(model);
-                        const size = box.getSize(new THREE.Vector3()).length();
-                        const center = box.getCenter(new THREE.Vector3());
+                        console.log("Loading model from URL:", modelUrl);
                         
-                        // Reset model position
-                        model.position.x = -center.x;
-                        model.position.y = -center.y;
-                        model.position.z = -center.z;
+                        // Reset loading status
+                        setLoadingStatus("Loading model...", "blue");
                         
-                        // Reset camera position
-                        camera.position.copy(center);
-                        camera.position.x += size / 2.0;
-                        camera.position.y += size / 5.0;
-                        camera.position.z += size / 2.0;
-                        camera.lookAt(center);
-                        
-                        // Reset controller
-                        controls.reset();
-                        
-                        console.log('View reset');
-                    } catch (error) {
-                        console.error('Reset view failed:', error);
-                    }
-                }
-                
-                // Update onWindowResize function
-                function onWindowResize() {
-                    try {
-                        const container = document.getElementById('modelContainer');
-                        const width = container.clientWidth;
-                        const height = container.clientHeight;
-                        
-                        if (camera) {
-                            camera.aspect = width / height;
-                            camera.updateProjectionMatrix();
+                        // Ensure we have THREE object
+                        if (!window.THREE) {
+                            console.error("THREE library not loaded!");
+                            setLoadingStatus("THREE.js library not loaded, cannot load model", "red");
+                            createFallbackDisplay();
+                            return;
                         }
                         
-                        if (renderer) {
-                            renderer.setSize(width, height);
-                        }
-                    } catch (error) {
-                        console.error('Failed to resize window:', error);
-                    }
-                }
-                
-                // Fix updateCamera function
-                function updateCamera() {
-                    if (!model || !camera) return;
-                    
-                    try {
-                        const box = new THREE.Box3().setFromObject(model);
-                        const size = box.getSize(new THREE.Vector3()).length();
-                        const center = box.getCenter(new THREE.Vector3());
-                        
-                        camera.position.copy(center);
-                        camera.position.x += size / 2.0;
-                        camera.position.y += size / 5.0;
-                        camera.position.z += size / 2.0;
-                        camera.lookAt(center);
-                        camera.updateProjectionMatrix();
-                    } catch (error) {
-                        console.error('Failed to update camera:', error);
-                    }
-                }
-                
-                // Add model annotation initialization
-                function initializeAnnotations(model) {
-                    // Placeholder function - Can be implemented here to add model annotation functionality
-                    console.log('Model annotation initialization');
-                }
-                
-                // Control mode setting function
-                function setControlMode(mode) {
-                    console.log(`Switching control mode: ${mode}`);
-                    controlMode = mode;
-                    
-                    if (!controls) {
-                        console.warn('Controller not initialized, unable to set mode');
-                        return;
-                    }
-                    
-                    // Set control mode for controller rotation, zooming, and panning restrictions
-                    switch(mode) {
-                        case 'rotate':
-                            controls.enableRotate = true;
-                            controls.enableZoom = true; // Allow zooming
-                            controls.enablePan = false;
-                            break;
-                        case 'zoom':
-                            controls.enableRotate = false;
-                            controls.enableZoom = true;
-                            controls.enablePan = false;
-                            break;
-                        case 'pan':
-                            controls.enableRotate = false;
-                            controls.enableZoom = false;
-                            controls.enablePan = true;
-                            break;
-                    }
-                    
-                    // Highlight currently selected button
-                    document.querySelectorAll('.model-controls button').forEach(btn => {
-                        btn.classList.remove('bg-blue-600', 'text-white');
-                        btn.classList.add('bg-white', 'text-gray-800');
-                    });
-                    
-                    const modeBtn = document.getElementById(mode + 'Btn');
-                    if (modeBtn) {
-                        modeBtn.classList.remove('bg-white', 'text-gray-800');
-                        modeBtn.classList.add('bg-blue-600', 'text-white');
-                    }
-                    
-                    // Show controller status information once
-                    window.debugControlsOnce = true;
-                    
-                    // Force update controller once
-                    if (controls) {
-                        controls.update();
-                    }
-                }
-                
-                // If all paths fail, create and display a colored fallback model
-                function showFallbackModel(colorOptions) {
-                    console.log('Displaying simplified fallback model');
-                    loadingStatus.innerHTML = `
-                        <div class="loading-container">
-                            <p class="text-yellow-600 font-bold">Using Simplified Model</p>
-                            <p class="text-gray-800">Displaying built-in simplified version.</p>
-                        </div>
-                    `;
-                    
-                    // Default color settings
-                    const colors = colorOptions || {
-                        body: 0x666666,
-                        head: 0x555555,
-                        legs: 0x666666,
-                        tail: 0x666666
-                    };
-                    
-                    try {
                         // Ensure scene is initialized
-                        if (!scene) {
-                            console.log('Scene not initialized, creating new scene');
-                            scene = new THREE.Scene();
-                            scene.background = new THREE.Color(0xf0f0f0);
-                        }
-                        
-                        // Remove existing model if there is one
-                        if (model) {
-                            scene.remove(model);
-                        }
-                        
-                        // Create simple wolf shape
-                        const group = new THREE.Group();
-                        
-                        // Body
-                        const bodyGeometry = new THREE.BoxGeometry(1.5, 0.8, 0.6);
-                        const bodyMaterial = new THREE.MeshStandardMaterial({ color: colors.body });
-                        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-                        group.add(body);
-                        
-                        // Head
-                        const headGeometry = new THREE.BoxGeometry(0.6, 0.5, 0.5);
-                        const headMaterial = new THREE.MeshStandardMaterial({ color: colors.head });
-                        const head = new THREE.Mesh(headGeometry, headMaterial);
-                        head.position.x = 1.0;
-                        group.add(head);
-                        
-                        // Legs
-                        const legGeometry = new THREE.BoxGeometry(0.2, 0.8, 0.2);
-                        const legMaterial = new THREE.MeshStandardMaterial({ color: colors.legs });
-                        
-                        const frontLegLeft = new THREE.Mesh(legGeometry, legMaterial);
-                        frontLegLeft.position.set(0.5, -0.8, 0.2);
-                        group.add(frontLegLeft);
-                        
-                        const frontLegRight = new THREE.Mesh(legGeometry, legMaterial);
-                        frontLegRight.position.set(0.5, -0.8, -0.2);
-                        group.add(frontLegRight);
-                        
-                        const backLegLeft = new THREE.Mesh(legGeometry, legMaterial);
-                        backLegLeft.position.set(-0.5, -0.8, 0.2);
-                        group.add(backLegLeft);
-                        
-                        const backLegRight = new THREE.Mesh(legGeometry, legMaterial);
-                        backLegRight.position.set(-0.5, -0.8, -0.2);
-                        group.add(backLegRight);
-                        
-                        // Tail
-                        const tailGeometry = new THREE.BoxGeometry(0.8, 0.1, 0.1);
-                        const tailMaterial = new THREE.MeshStandardMaterial({ color: colors.tail });
-                        const tail = new THREE.Mesh(tailGeometry, tailMaterial);
-                        tail.position.set(-1.0, 0, 0);
-                        tail.rotation.y = -Math.PI / 8; // Make tail slightly tilted
-                        group.add(tail);
-                        
-                        // Ensure scene has light
-                        const existingLights = scene.children.filter(child => 
-                            child.isAmbientLight || child.isDirectionalLight);
+                        if (!window.scene) {
+                            console.error("Scene not initialized!");
+                            setLoadingStatus("3D scene not initialized, attempting to initialize", "orange");
+                            initializeThreeJS();
                             
-                        if (existingLights.length === 0) {
-                            console.log('Adding light to scene');
-                            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-                            scene.add(ambientLight);
-                            
-                            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-                            directionalLight.position.set(1, 1, 1);
-                            scene.add(directionalLight);
-                        }
-                        
-                        // Add model to scene
-                        scene.add(group);
-                        model = group;
-                        
-                        // Ensure camera is initialized
-                        if (!camera) {
-                            console.log('Camera not initialized, creating new camera');
-                            const container = document.getElementById('modelContainer');
-                            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
-                        }
-                        
-                        // Ensure renderer is initialized
-                        if (!renderer) {
-                            console.log('Renderer not initialized, creating new renderer');
-                            const container = document.getElementById('modelContainer');
-                            renderer = new THREE.WebGLRenderer({ antialias: true });
-                            renderer.setSize(container.clientWidth, container.clientHeight);
-                            container.appendChild(renderer.domElement);
-                        }
-                        
-                        // Ensure controller is initialized
-                        if (!controls && renderer) {
-                            console.log('Controller not initialized, creating new controller');
-                            controls = new ThreeOrbitControls(camera, renderer.domElement);
-                            controls.enableDamping = true;
-                            controls.dampingFactor = 0.05;
-                            controls.screenSpacePanning = true;
-                            
-                            // Allow rotation and zooming
-                            controls.enableRotate = true;
-                            controls.enableZoom = true;
-                            controls.enablePan = false;
-                            
-                            // Configure controller other parameters
-                            controls.minDistance = 2;
-                            controls.maxDistance = 20;
-                            controls.rotateSpeed = 1.0;
-                            controls.zoomSpeed = 1.0;
-                        } else if (controls) {
-                            // Reconfigure existing controller
-                            controls.enableRotate = true;
-                            controls.enableZoom = true;
-                            controls.enablePan = false;
-                            controls.update();
-                        }
-                        
-                        // Adjust camera position
-                        camera.position.set(3, 1.5, 3);
-                        camera.lookAt(0, 0, 0);
-                        
-                        // Set default control mode
-                        setControlMode('rotate');
-                        
-                        // Ensure animation loop is running
-                        if (!window.animationFrameId) {
-                            animate();
-                        }
-                        
-                        // Show model information
-                        const modelInfo = document.getElementById('modelInfo');
-                        const modelStatus = document.getElementById('modelStatus');
-                        const modelTriangles = document.getElementById('modelTriangles');
-                        const modelVertices = document.getElementById('modelVertices');
-                        const modelMaterials = document.getElementById('modelMaterials');
-                        
-                        if (modelInfo && modelStatus && modelTriangles && modelVertices && modelMaterials) {
-                            modelInfo.classList.remove('hidden');
-                            modelStatus.textContent = 'Using simplified model';
-                            modelStatus.style.color = 'orange';
-                            modelTriangles.textContent = '32';
-                            modelVertices.textContent = '56';
-                            modelMaterials.textContent = '2';
-                        }
-                        
-                        console.log('Simplified model created and displayed');
-                        return true;
-                    } catch (error) {
-                        console.error('Failed to create simplified model:', error);
-                        loadingStatus.innerHTML += `<p class="text-red-600">Failed to create simplified model: ${error.message}</p>`;
-                        return false;
-                    }
-                }
-
-                // Add model file upload processing function
-                function handleModelUpload() {
-                    const fileInput = document.getElementById('modelUpload');
-                    const file = fileInput.files[0];
-                    
-                    console.log('Processing model upload');
-                    
-                    if (file) {
-                        console.log(`Loading uploaded model: ${file.name}`);
-                        loadingStatus.textContent = `Loading uploaded model: ${file.name}`;
-                        
-                        // Create URL for uploaded file
-                        try {
-                            const fileURL = URL.createObjectURL(file);
-                            
-                            // Remove existing model if there is one
-                            if (model && scene) {
-                                scene.remove(model);
-                            }
-                            
-                            // Load model directly, no need to check if file exists
-                            loadModelWithGLTF(fileURL, 0, [fileURL]);
-                        } catch (error) {
-                            console.error('Error creating object URL:', error);
-                            loadingStatus.innerHTML = `
-                                <div class="loading-container">
-                                    <p class="text-red-600 font-bold">File Loading Error</p>
-                                    <p class="text-gray-800">${error.message}</p>
-                                </div>
-                            `;
-                        }
-                    } else {
-                        alert('Please select a GLB or GLTF file to upload');
-                    }
-                }
-
-                // Ensure content is displayed from the start when directly loaded from the page
-                window.addEventListener('DOMContentLoaded', () => {
-                    // Initialize
-                    console.log('DOM fully loaded, starting initialization...');
-                    
-                    // Add control button event listeners
-                    const rotateBtnEl = document.getElementById('rotateBtn');
-                    const zoomBtnEl = document.getElementById('zoomBtn');
-                    const panBtnEl = document.getElementById('panBtn');
-                    const resetBtnEl = document.getElementById('resetBtn');
-                    
-                    if (rotateBtnEl) {
-                        rotateBtnEl.addEventListener('click', function() {
-                            console.log('Clicked rotation button');
-                            setControlMode('rotate');
-                        });
-                    } else {
-                        console.error('Rotation button element not found');
-                    }
-                    
-                    if (zoomBtnEl) {
-                        zoomBtnEl.addEventListener('click', function() {
-                            console.log('Clicked zoom button');
-                            setControlMode('zoom');
-                        });
-                    } else {
-                        console.error('Zoom button element not found');
-                    }
-                    
-                    if (panBtnEl) {
-                        panBtnEl.addEventListener('click', function() {
-                            console.log('Clicked pan button');
-                            setControlMode('pan');
-                        });
-                    } else {
-                        console.error('Pan button element not found');
-                    }
-                    
-                    if (resetBtnEl) {
-                        resetBtnEl.addEventListener('click', function() {
-                            console.log('Clicked reset button');
-                            resetControls();
-                        });
-                    } else {
-                        console.error('Reset button element not found');
-                    }
-                    
-                    init();
-                    
-                    // Check if buttons are correctly listening to events
-                    setTimeout(() => {
-                        const testButtons = ['loadStandardModel', 'loadSkeletonModel', 'uploadModelBtn'];
-                        testButtons.forEach(id => {
-                            const btn = document.getElementById(id);
-                            if (btn) {
-                                console.log(`Button ${id} exists`);
-                                // Add test click effect
-                                btn.addEventListener('mousedown', function() {
-                                    this.style.backgroundColor = '#3b82f6'; // Change color on click
-                                });
-                                btn.addEventListener('mouseup', function() {
-                                    this.style.backgroundColor = '#2563eb'; // Restore color on release
-                                });
-                            } else {
-                                console.error(`Button ${id} not found`);
-                            }
-                        });
-                        
-                        // Add event listeners for buttons in View Options section
-                        const viewOptionsButtons = document.querySelectorAll('.grid button');
-                        viewOptionsButtons.forEach(button => {
-                            console.log('View Options button:', button.textContent);
-                            
-                            // If button ID is already set to loadSkeletonModel, no need to repeat listener
-                            if (button.id === 'loadSkeletonModel') {
-                                console.log('Skipping existing ID button:', button.id);
+                            // If there's still no scene after initialization, exit
+                            if (!window.scene) {
+                                setLoadingStatus("Cannot initialize 3D scene, model loading failed", "red");
+                                createFallbackDisplay();
                                 return;
                             }
-                            
-                            // Determine function based on button text
-                            const buttonText = button.textContent.trim();
-                            if (buttonText.includes('Skeletal') || buttonText.includes('骨架')) {
-                                button.id = 'loadSkeletonModel'; // Set ID
-                                button.addEventListener('click', () => {
-                                    console.log('Loading skeleton model');
-                                    loadingStatus.textContent = 'Loading skeleton model...';
-                                    
-                                    // Get current page's full path
-                                    const currentPath = window.location.pathname;
-                                    const basePath = currentPath.substring(0, currentPath.lastIndexOf('/') + 1);
-                                    
-                                    // Use absolute paths
-                                    const modelPathsToTry = [
-                                        basePath + 'models/direwolf-skeleton.glb',
-                                        basePath + 'direwolf-skeleton.glb',
-                                        './models/direwolf-skeleton.glb',
-                                        'models/direwolf-skeleton.glb'
-                                    ];
-                                    
-                                    // Remove existing model if there is one
-                                    if (model && scene) {
-                                        scene.remove(model);
-                                    }
-                                    
-                                    tryLoadingFromMultiplePaths(modelPathsToTry);
-                                });
-                                console.log('Added event listener for skeleton view button');
-                            } else if (buttonText.includes('Muscular') || buttonText.includes('肌肉')) {
-                                button.addEventListener('click', () => {
-                                    console.log('Display muscular model');
-                                    alert('Muscular model feature is under development');
-                                });
-                            } else if (buttonText.includes('External') || buttonText.includes('外观')) {
-                                button.addEventListener('click', () => {
-                                    console.log('Display external model');
-                                    alert('External model feature is under development');
-                                });
-                            } else if (buttonText.includes('Walking') || buttonText.includes('行走')) {
-                                button.addEventListener('click', () => {
-                                    console.log('Play walking animation');
-                                    alert('Walking animation feature is under development');
-                                });
-                            } else if (buttonText.includes('Running') || buttonText.includes('奔跑')) {
-                                button.addEventListener('click', () => {
-                                    console.log('Play running animation');
-                                    alert('Running animation feature is under development');
-                                });
-                            } else if (buttonText.includes('Hunting') || buttonText.includes('捕猎')) {
-                                button.addEventListener('click', () => {
-                                    console.log('Play hunting animation');
-                                    alert('Hunting animation feature is under development');
-                                });
-                            }
-                        });
-                    }, 1000);
-                    
-                    // If 5 seconds pass without seeing model, display simplified version
-                    setTimeout(() => {
-                        if (!model || !scene.children.some(child => child === model)) {
-                            console.log('No model detected after 5 seconds, displaying simplified version');
-                            showFallbackModel({
-                                body: 0x8B4513,   // Brown
-                                head: 0x6B4226,   // Dark brown
-                                legs: 0x8B4513,   // Brown
-                                tail: 0x8B4513    // Brown
-                            });
                         }
-                    }, 5000);
-                });
+                        
+                        // Use correct loader
+                        let loader;
+                        if (modelUrl.toLowerCase().endsWith('.glb') || modelUrl.toLowerCase().endsWith('.gltf')) {
+                            loader = new THREE.GLTFLoader();
+                        } else if (modelUrl.toLowerCase().endsWith('.obj')) {
+                            loader = new THREE.OBJLoader();
+                        } else {
+                            const errorMsg = `Unsupported model format: ${modelUrl.split('.').pop()}`;
+                            console.error(errorMsg);
+                            setLoadingStatus(errorMsg, "red");
+                            createFallbackDisplay();
+                            return;
+                        }
+                        
+                        // ... existing code remains unchanged ...
+                        
+                    } catch (error) {
+                        console.error("Error occurred during model loading:", error);
+                        setLoadingStatus("Model loading error: " + error.message, "red");
+                        createFallbackDisplay();
+                    }
+                }
             </script>
         </section>
 
